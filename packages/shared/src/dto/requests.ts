@@ -11,7 +11,9 @@ import type {
   Currency,
   InvoiceStatus,
   PaymentMethod,
+  PriceRuleType,
   ProductCategory,
+  ProrationRule,
   QuoteStage,
   Role,
   SubscriptionStatus,
@@ -34,9 +36,11 @@ import type {
   NegotiationEventDto,
   OrderDto,
   PriceListDto,
+  PriceListEntryDto,
   ProductDto,
   QuotationDto,
   QuotationSummaryDto,
+  ReplenishmentRuleDto,
   RiskAssessmentDto,
   StockDto,
   SubscriptionDto,
@@ -126,6 +130,51 @@ export interface UpsertProductRequest {
   promoted?: boolean;
   variants?: ProductDto['variants'];
   status?: ProductDto['status'];
+}
+
+/* ------------------------------------------------------------------ price lists (screen 17) */
+
+/**
+ * Edit a tier's *price rule* — what that tier actually pays.
+ * Deliberately separate from the tier's *discount ceiling*, which is governance
+ * and lives on screen 18. See docs/DECISIONS.md D-015.
+ */
+export interface UpdatePriceListRequest {
+  name?: string;
+  currencies?: Currency[];
+  ruleType?: PriceRuleType;
+  /** Percent for PERCENT_OFF_BASE (10 === "base minus 10 percent"); ignored for NONE. */
+  ruleValue?: number;
+  /** Per-product overrides, which beat the rule. Replaces the list when supplied. */
+  entries?: PriceListEntryDto[];
+  active?: boolean;
+  reason: string;
+}
+
+/* ------------------------------------------------------------------ warehouses */
+
+export interface UpsertWarehouseRequest {
+  code?: string;
+  name: string;
+  /** Ranking weight for the split planner. LOWER is preferred. */
+  shippingCostWeight: number;
+  baseShipmentCost: Money;
+  perUnitShippingCost: Money;
+  replenishmentRule?: Partial<ReplenishmentRuleDto>;
+  active?: boolean;
+}
+
+/* ------------------------------------------------------------------ subscription plans */
+
+export interface UpsertSubscriptionPlanRequest {
+  name: string;
+  productId: Id;
+  cycle: BillingCycle;
+  /** Charged each cycle, per unit. */
+  amount: Money;
+  prorationRule?: ProrationRule;
+  cancellationRule?: ProrationRule;
+  active?: boolean;
 }
 
 export interface ProductDashboardDto {

@@ -40,8 +40,16 @@ export const apiInterceptor: HttpInterceptorFn = (req, next) => {
           'The API is not responding. Check that `npm run dev:api` is running, or switch on mock mode in environment.ts.',
         );
       } else if (err.status === 401) {
+        // Remember where they were, so signing in again returns them to it
+        // rather than dumping them on their landing screen (USER_FLOWS §E13).
+        const from = router.url;
         session.logout(false);
-        void router.navigate(['/login'], { queryParams: { reason: 'expired' } });
+        void router.navigate(['/login'], {
+          queryParams: {
+            reason: 'expired',
+            ...(from && !from.startsWith('/login') ? { redirect: from } : {}),
+          },
+        });
         toast.error('Your session has ended', 'Please sign in again.');
       } else if (err.status === 403) {
         toast.error('Not allowed', message);

@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 /** The dashboard tiles on screens 2, 14, 15 and 16. */
 @Component({
   selector: 'df-kpi-tile',
   standalone: true,
-  imports: [RouterLink],
+  imports: [NgTemplateOutlet, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (link()) {

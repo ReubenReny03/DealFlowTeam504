@@ -4,12 +4,26 @@ import { Role } from '@dealflow/shared';
 import { SessionStore } from '../state/session.store';
 import { ToastStore } from '../state/toast.store';
 
+/**
+ * Where an unauthenticated visitor is sent: back to sign-in, carrying the page
+ * they wanted so they land on it afterwards, and — when their token aged out
+ * rather than never existing — the reason for the amber banner (§E13).
+ */
+function toLogin(session: SessionStore, router: Router, url: string) {
+  return router.createUrlTree(['/login'], {
+    queryParams: {
+      redirect: url,
+      ...(session.wasSessionExpired() ? { reason: 'expired' } : {}),
+    },
+  });
+}
+
 /** Must be signed in. */
 export const authGuard: CanActivateFn = (_route, state) => {
   const session = inject(SessionStore);
   const router = inject(Router);
   if (session.isAuthenticated()) return true;
-  return router.createUrlTree(['/login'], { queryParams: { redirect: state.url } });
+  return toLogin(session, router, state.url);
 };
 
 /**
@@ -23,9 +37,7 @@ export function roleGuard(roles: Role[]): CanActivateFn {
     const router = inject(Router);
     const toast = inject(ToastStore);
 
-    if (!session.isAuthenticated()) {
-      return router.createUrlTree(['/login'], { queryParams: { redirect: state.url } });
-    }
+    if (!session.isAuthenticated()) return toLogin(session, router, state.url);
     const role = session.role();
     if (role && roles.includes(role)) return true;
 
@@ -41,9 +53,7 @@ export function roleGuard(roles: Role[]): CanActivateFn {
 export const internalGuard: CanActivateFn = (route, state) => {
   const session = inject(SessionStore);
   const router = inject(Router);
-  if (!session.isAuthenticated()) {
-    return router.createUrlTree(['/login'], { queryParams: { redirect: state.url } });
-  }
+  if (!session.isAuthenticated()) return toLogin(session, router, state.url);
   if (session.role() === Role.CUSTOMER) return router.createUrlTree(['/portal']);
   return true;
 };

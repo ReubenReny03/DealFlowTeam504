@@ -39,5 +39,7 @@ happens at a checkpoint (T+8 / T+14 / T+19), never between them.
 | # | Date | Type | What changed | Why | Who | Downstream |
 |---|---|---|---|---|---|---|
 | 1 | T+0 | Baseline | Initial contract: enums, entity DTOs, request/response DTOs, and the nine pure functions (`computeLinePricing`, `computeQuoteTotals`, `computeMargin`, `calculateBlendedRisk`, `resolveApprovalChain`, `prorate`, `nextBillingDates`, `rankUpsells`, `planWarehouseSplit`) | Phase 1 | Architect | — |
+| 2 | T+10 | Additive | `AuditEntity` gains `PRICELIST`, `WAREHOUSE`, `SUBSCRIPTION_PLAN` | The catalogue writes (A-19..A-22) audit-log against their own entity rather than borrowing `CONFIG`. Nothing switches exhaustively on `AuditEntity`, so this is non-breaking. | A | none — additive enum members |
+| 3 | T+10 | Additive | New request DTOs: `UpdatePriceListRequest`, `UpsertWarehouseRequest`, `UpsertSubscriptionPlanRequest` | `PUT /pricelists/:id`, `POST`/`PUT /warehouses` and `POST /subscription-plans` needed typed bodies; `UpsertProductRequest` already existed. | A | none — new exported types |
 
 <!-- Append below. One row per change. -->

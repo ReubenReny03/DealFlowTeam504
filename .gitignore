@@ -15,3 +15,6 @@ storage/logs/
 
 # one-off local helper, not part of the project
 script.txt
+
+
+.agent

@@ -1,18 +1,26 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { CATEGORY_LABEL, EMPTY_STATES, type ProductDashboardDto, type ProductDto } from '@dealflow/shared';
+import {
+  BillingCycle, CATEGORY_LABEL, CYCLE_LABEL, EMPTY_STATES, ProductCategory, money,
+  type ProductDashboardDto, type ProductDto, type UpsertProductRequest,
+} from '@dealflow/shared';
 import { ApiService } from '../../core/api/api.service';
 import { ToastStore } from '../../core/state/toast.store';
 import {
-  EmptyStateComponent, ErrorStateComponent, KpiTileComponent, LoadingComponent, MoneyPipe, StatusChipComponent,
+  EmptyStateComponent, ErrorStateComponent, KpiTileComponent, LoadingComponent, ModalComponent, MoneyPipe,
+  StatusChipComponent,
 } from '../../shared/ui';
 
 /** Screen 16 — Product Dashboard. */
 @Component({
   selector: 'df-product-list',
   standalone: true,
-  imports: [KpiTileComponent, MoneyPipe, StatusChipComponent, LoadingComponent, ErrorStateComponent, EmptyStateComponent],
+  imports: [
+    FormsModule, KpiTileComponent, MoneyPipe, StatusChipComponent, LoadingComponent, ErrorStateComponent,
+    EmptyStateComponent, ModalComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -73,6 +81,67 @@ import {
       }
       }
     }
+
+    <df-modal [open]="createOpen()" title="New product" subtitle="A rep can quote it as soon as it is active." (close)="createOpen.set(false)">
+      <div class="grid gap-3 sm:grid-cols-2">
+        <label class="block sm:col-span-2">
+          <span class="df-label">Product name</span>
+          <input class="df-input" [(ngModel)]="draft.name" placeholder="e.g. Standing Desk" />
+        </label>
+        <label class="block">
+          <span class="df-label">Category</span>
+          <select class="df-input" [(ngModel)]="draft.category">
+            @for (c of categories; track c) { <option [value]="c">{{ categoryLabel[c] }}</option> }
+          </select>
+        </label>
+        <label class="block">
+          <span class="df-label">Unit</span>
+          <input class="df-input" [(ngModel)]="draft.unit" placeholder="Each" />
+        </label>
+        <label class="block">
+          <span class="df-label">Price (USD)</span>
+          <input class="df-input" type="number" min="0" step="0.01" [(ngModel)]="draft.price" />
+        </label>
+        <label class="block">
+          <span class="df-label">Cost (USD)</span>
+          <input class="df-input" type="number" min="0" step="0.01" [(ngModel)]="draft.cost" />
+          <span class="mt-1 block text-xs text-slate-400">Drives the margin indicator and the upsell ranking.</span>
+        </label>
+        <label class="block">
+          <span class="df-label">Tax %</span>
+          <input class="df-input" type="number" min="0" max="100" [(ngModel)]="draft.taxPct" />
+        </label>
+        <label class="block">
+          <span class="df-label">Quantity on hand</span>
+          <input class="df-input" type="number" min="0" [(ngModel)]="draft.quantityOnHand" />
+        </label>
+        <label class="block sm:col-span-2">
+          <span class="df-label">Description</span>
+          <textarea class="df-input min-h-[4rem]" [(ngModel)]="draft.description"></textarea>
+        </label>
+        <label class="flex items-center gap-2 sm:col-span-2">
+          <input type="checkbox" class="h-4 w-4 rounded border-slate-300" [(ngModel)]="draft.isSubscription" />
+          <span class="text-sm text-slate-700">This product is sold as a subscription</span>
+        </label>
+        @if (draft.isSubscription) {
+          <label class="block sm:col-span-2">
+            <span class="df-label">Recurring</span>
+            <select class="df-input" [(ngModel)]="draft.recurringCycle">
+              @for (c of cycles; track c) { <option [value]="c">{{ cycleLabel[c] }}</option> }
+            </select>
+            <span class="mt-1 block text-xs text-slate-400">
+              A recurring order with this product is invoiced at the beginning of the period.
+            </span>
+          </label>
+        }
+      </div>
+      <div class="mt-5 flex justify-end gap-2">
+        <button type="button" class="df-btn-ghost" (click)="createOpen.set(false)">Cancel</button>
+        <button type="button" class="df-btn-primary" [disabled]="saving() || !draft.name.trim()" (click)="create()">
+          {{ saving() ? 'Creating…' : 'Create product' }}
+        </button>
+      </div>
+    </df-modal>
   `,
 })
 export class ProductListPage implements OnInit {
@@ -85,6 +154,13 @@ export class ProductListPage implements OnInit {
   protected readonly data = signal<ProductDashboardDto | null>(null);
   protected readonly empty = EMPTY_STATES['products'];
   protected readonly categoryLabel = CATEGORY_LABEL;
+  protected readonly cycleLabel = CYCLE_LABEL;
+  protected readonly categories = Object.values(ProductCategory);
+  protected readonly cycles = Object.values(BillingCycle);
+
+  protected readonly createOpen = signal(false);
+  protected readonly saving = signal(false);
+  draft = emptyDraft();
 
   ngOnInit(): void { void this.load(); }
 
@@ -110,6 +186,53 @@ export class ProductListPage implements OnInit {
   }
 
   open(p: ProductDto): void { void this.router.navigate(['/admin/products', p.id]); }
-  newProduct(): void { this.toast.info('+ New Product', 'The product editor is Agent A, task A-9 in docs/AGENT_A.md.'); }
   managePriceFields(): void { void this.router.navigate(['/admin/pricelists']); }
+
+  newProduct(): void {
+    this.draft = emptyDraft();
+    this.createOpen.set(true);
+  }
+
+  /** Money leaves this form as an integer count of cents — never a float. */
+  async create(): Promise<void> {
+    const body: UpsertProductRequest = {
+      name: this.draft.name.trim(),
+      category: this.draft.category,
+      description: this.draft.description.trim(),
+      unitPrice: money(Number(this.draft.price) || 0),
+      costPrice: money(Number(this.draft.cost) || 0),
+      unit: this.draft.unit.trim() || 'Each',
+      taxPct: Number(this.draft.taxPct) || 0,
+      isSubscription: this.draft.isSubscription,
+      recurringCycle: this.draft.isSubscription ? this.draft.recurringCycle : undefined,
+      quantityOnHand: Number(this.draft.quantityOnHand) || 0,
+    };
+    this.saving.set(true);
+    try {
+      const product = await firstValueFrom(this.api.post<ProductDto>('/products', body));
+      this.createOpen.set(false);
+      this.toast.success('Product created', `${product.name} (${product.sku}) is in the catalogue.`);
+      await this.router.navigate(['/admin/products', product.id]);
+    } catch {
+      /* the interceptor has already toasted the reason */
+    } finally {
+      this.saving.set(false);
+    }
+  }
+}
+
+/** The create form's working copy. Prices are majors here and cents on the wire. */
+function emptyDraft() {
+  return {
+    name: '',
+    category: ProductCategory.HARDWARE as ProductCategory,
+    description: '',
+    price: 0,
+    cost: 0,
+    unit: 'Each',
+    taxPct: 15,
+    quantityOnHand: 0,
+    isSubscription: false,
+    recurringCycle: BillingCycle.MONTHLY as BillingCycle,
+  };
 }

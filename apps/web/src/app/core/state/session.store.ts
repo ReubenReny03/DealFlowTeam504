@@ -13,6 +13,13 @@ import { ApiService } from '../api/api.service';
 
 const STORAGE_KEY = 'dealflow360.session';
 
+/**
+ * True when the stored session had already aged out by the time the app booted.
+ * The guards read it so the sign-in screen can explain *why* it is asking again
+ * (USER_FLOWS §E13) rather than appearing for no visible reason.
+ */
+let expiredOnLoad = false;
+
 interface StoredSession {
   token: string;
   expiresAt: string;
@@ -104,6 +111,11 @@ export class SessionStore {
     });
   }
 
+  /** Did we boot with a session that had already expired? */
+  wasSessionExpired(): boolean {
+    return expiredOnLoad;
+  }
+
   landingRoute(): string {
     const role = this.role();
     return role ? LANDING_ROUTE[role] : '/login';
@@ -116,6 +128,7 @@ export class SessionStore {
   }
 
   private persist(session: StoredSession): void {
+    expiredOnLoad = false;
     this.state.set(session);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
   }
@@ -126,7 +139,11 @@ function readStorage(): StoredSession | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredSession;
-    if (new Date(parsed.expiresAt).getTime() <= Date.now() && !parsed.portalToken) return null;
+    if (new Date(parsed.expiresAt).getTime() <= Date.now() && !parsed.portalToken) {
+      localStorage.removeItem(STORAGE_KEY);
+      expiredOnLoad = true;
+      return null;
+    }
     return parsed;
   } catch {
     return null;

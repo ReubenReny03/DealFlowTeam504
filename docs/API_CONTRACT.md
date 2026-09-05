@@ -140,14 +140,14 @@ Errors: `400` if `reason` is missing · `404` if governance has never been saved
 | GET | `/products` | any | `ProductDto[]` | ✅ |
 | GET | `/products/:id` | any | `ProductDto` | ✅ |
 | GET | `/products/dashboard` | any | `ProductDashboardDto` | ✅ |
-| POST | `/products` | ADMIN | `ProductDto` | 🔨 A |
-| PUT | `/products/:id` | ADMIN | `ProductDto` | 🔨 A |
+| POST | `/products` | ADMIN | `ProductDto` | ✅ |
+| PUT | `/products/:id` | ADMIN | `ProductDto` | ✅ |
 | GET | `/pricelists` · `/pricelists/:id` | any | `PriceListDto` | ✅ |
-| PUT | `/pricelists/:id` | ADMIN | `PriceListDto` | 🔨 A |
+| PUT | `/pricelists/:id` | ADMIN | `PriceListDto` | ✅ |
 | GET | `/warehouses` · `/warehouses/:id` | any | `WarehouseDto` | ✅ |
-| POST · PUT | `/warehouses` · `/warehouses/:id` | ADMIN | `WarehouseDto` | 🔨 A |
+| POST · PUT | `/warehouses` · `/warehouses/:id` | ADMIN | `WarehouseDto` | ✅ |
 | GET | `/subscription-plans` | any | `SubscriptionPlanDto[]` | ✅ |
-| POST | `/subscription-plans` | ADMIN | `SubscriptionPlanDto` | 🔨 A |
+| POST | `/subscription-plans` | ADMIN | `SubscriptionPlanDto` | ✅ |
 | GET | `/customers` · `/customers/:id` | any | `CustomerDto` | ✅ |
 | GET | `/users?role=` | ADMIN | `UserDto[]` | ✅ |
 
