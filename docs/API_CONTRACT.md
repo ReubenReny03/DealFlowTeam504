@@ -164,10 +164,10 @@ Filters: `/products?category=&status=&q=` · `/customers?tier=&ownerId=&q=`
 | GET | `/quotations/board` | any | `?ownerId=` | `KanbanBoardDto` | ✅ |
 | GET | `/quotations/dashboard` | any | — | `SalesDashboardDto` | ✅ |
 | GET | `/quotations/:id/audit` | any | — | `AuditLogDto[]` | ✅ |
-| POST | `/quotations` | REP, MGR, ADMIN | `CreateQuotationRequest` | `QuotationDto` | 🔨 B |
-| PATCH | `/quotations/:id` | REP, MGR, ADMIN | `UpdateQuotationRequest` | `QuotationDto` | 🔨 B |
-| POST | `/quotations/preview` | REP, MGR, ADMIN | `PreviewQuotationRequest` | `QuotationPreviewDto` | 🔨 B |
-| POST | `/quotations/:id/submit` | REP, MGR, ADMIN | — | `SubmitQuotationResponse` | 🔨 B **[BLOCKING]** |
+| POST | `/quotations` | REP, MGR, ADMIN | `CreateQuotationRequest` | `QuotationDto` | ✅ |
+| PATCH | `/quotations/:id` | REP, MGR, ADMIN | `UpdateQuotationRequest` | `QuotationDto` | ✅ |
+| POST | `/quotations/preview` | REP, MGR, ADMIN | `PreviewQuotationRequest` | `QuotationPreviewDto` | ✅ |
+| POST | `/quotations/:id/submit` | REP, MGR, ADMIN | — | `SubmitQuotationResponse` | ✅ |
 
 `PATCH /quotations/:id` — **must** send the `version` last read.
 
@@ -211,9 +211,9 @@ When risk is 0: `autoApproved: true`, `approval: null`, stage `APPROVED`.
 
 | M | Path | Auth | Request | Response | Status |
 |---|---|---|---|---|---|
-| POST | `/pricing/preview` | any | `{customerId, lines[]}` | priced lines + totals | 🔨 B |
-| POST | `/risk/preview` | any | `{customerId, lines[]}` | `RiskAssessmentDto` | 🔨 B |
-| GET | `/upsell/suggestions?quotationId=` | any | — | `UpsellSuggestionDto[]` | 🔨 B |
+| POST | `/pricing/preview` | any | `{customerId, lines[]}` | priced lines + totals | ✅ |
+| POST | `/risk/preview` | any | `{customerId, lines[]}` | `RiskAssessmentDto` | ✅ |
+| GET | `/upsell/suggestions?quotationId=` | any | — | `UpsellSuggestionDto[]` | ✅ |
 
 ```json
 [ { "productId": "a30005…", "name": "Wireless Mouse", "sku": "WM-001",

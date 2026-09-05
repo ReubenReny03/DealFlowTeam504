@@ -188,6 +188,20 @@ export const EMPTY_STATES: Record<string, { title: string; body: string; cta?: s
     body: 'A sales rep cannot build a quotation until the catalogue has at least one active product with a price and a tax rate.',
     cta: '+ New Product',
   },
+  pricelists: {
+    title: 'No price lists configured',
+    body: "A customer's tier resolves what they pay through its price list. Until one exists, every line prices at the catalogue's base price.",
+  },
+  warehouses: {
+    title: 'No warehouses configured',
+    body: 'An order cannot be split or reserved until at least one warehouse exists with a shipping cost weight and a lead time.',
+    cta: '+ New Warehouse',
+  },
+  plans: {
+    title: 'No subscription plans yet',
+    body: 'A recurring line needs a plan before it can generate a billing schedule with its own proration and cancellation rules.',
+    cta: '+ New Plan',
+  },
   config: {
     title: 'Discount governance is not configured',
     body: 'Set the tier and category discount ceilings before any quotation can be risk-scored. Until then every quote routes to a Sales Manager by default.',

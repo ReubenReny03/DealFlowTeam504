@@ -22,6 +22,7 @@ This is the shared brain. Read it first. Then read `USER_FLOWS.md`, then your ow
 | `RUNBOOK.md` | setup, reset, troubleshooting |
 | `DECISIONS.md` | every judgement call, with its rationale |
 | `CREDENTIALS.md` | the seven demo accounts (generated) |
+| `PROGRESS.md` | the living status board — what's done, what's left, kept current |
 
 ---
 

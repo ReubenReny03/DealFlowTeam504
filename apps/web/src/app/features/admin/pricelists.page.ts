@@ -1,16 +1,16 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import { Currency, PriceRuleType, type PriceListDto, type UpdatePriceListRequest } from '@dealflow/shared';
+import { Currency, EMPTY_STATES, PriceRuleType, type PriceListDto, type UpdatePriceListRequest } from '@dealflow/shared';
 import { ApiService } from '../../core/api/api.service';
 import { ToastStore } from '../../core/state/toast.store';
-import { ErrorStateComponent, LoadingComponent, ModalComponent } from '../../shared/ui';
+import { EmptyStateComponent, ErrorStateComponent, LoadingComponent, ModalComponent } from '../../shared/ui';
 
 /** Tier price lists (the pricing half of screen 17's Pricelists block). */
 @Component({
   selector: 'df-pricelists',
   standalone: true,
-  imports: [FormsModule, LoadingComponent, ErrorStateComponent, ModalComponent],
+  imports: [FormsModule, LoadingComponent, ErrorStateComponent, EmptyStateComponent, ModalComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 class="df-h1">Price Lists</h1>
@@ -18,6 +18,9 @@ import { ErrorStateComponent, LoadingComponent, ModalComponent } from '../../sha
 
     @if (loading()) { <div class="mt-6"><df-loading [count]="3" label="Loading price lists" /></div> }
     @else if (error()) { <div class="mt-6"><df-error-state [message]="error()!" (retry)="load()" /></div> }
+    @else if (!lists().length) {
+      <div class="mt-6"><df-empty-state [title]="empty.title" [body]="empty.body" /></div>
+    }
     @else {
       <div class="df-card df-scroll-x mt-6">
         <table class="min-w-full divide-y divide-slate-200">
@@ -104,6 +107,7 @@ export class PriceListsPage implements OnInit {
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly lists = signal<PriceListDto[]>([]);
+  protected readonly empty = EMPTY_STATES['pricelists'];
 
   protected readonly editingList = signal<PriceListDto | null>(null);
   protected readonly saving = signal(false);

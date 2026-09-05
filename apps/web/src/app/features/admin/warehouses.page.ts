@@ -1,16 +1,16 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import { money, toMajor, type UpsertWarehouseRequest, type WarehouseDto } from '@dealflow/shared';
+import { EMPTY_STATES, money, toMajor, type UpsertWarehouseRequest, type WarehouseDto } from '@dealflow/shared';
 import { ApiService } from '../../core/api/api.service';
 import { ToastStore } from '../../core/state/toast.store';
-import { ErrorStateComponent, LoadingComponent, ModalComponent, MoneyPipe } from '../../shared/ui';
+import { EmptyStateComponent, ErrorStateComponent, LoadingComponent, ModalComponent, MoneyPipe } from '../../shared/ui';
 
 /** Warehouse setup: the numbers the split planner actually ranks on. */
 @Component({
   selector: 'df-warehouses',
   standalone: true,
-  imports: [FormsModule, LoadingComponent, ErrorStateComponent, ModalComponent, MoneyPipe],
+  imports: [FormsModule, LoadingComponent, ErrorStateComponent, EmptyStateComponent, ModalComponent, MoneyPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -23,6 +23,9 @@ import { ErrorStateComponent, LoadingComponent, ModalComponent, MoneyPipe } from
 
     @if (loading()) { <div class="mt-6"><df-loading [count]="2" label="Loading warehouses" /></div> }
     @else if (error()) { <div class="mt-6"><df-error-state [message]="error()!" (retry)="load()" /></div> }
+    @else if (!warehouses().length) {
+      <div class="mt-6"><df-empty-state [title]="empty.title" [body]="empty.body" [cta]="empty.cta ?? null" (action)="create()" /></div>
+    }
     @else {
       <div class="df-card df-scroll-x mt-6">
         <table class="min-w-full divide-y divide-slate-200">
@@ -114,6 +117,7 @@ export class WarehousesPage implements OnInit {
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly warehouses = signal<WarehouseDto[]>([]);
+  protected readonly empty = EMPTY_STATES['warehouses'];
 
   protected readonly formOpen = signal(false);
   protected readonly editingId = signal<string | null>(null);

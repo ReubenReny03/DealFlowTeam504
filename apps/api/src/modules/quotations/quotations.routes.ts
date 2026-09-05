@@ -1,39 +1,63 @@
 /**
  * Screens 2, 3 and 4.
- * Phase 3 wires the read side against real seeded data. The write side — line
- * management, live preview and `POST /:id/submit` (which computes the blended
- * risk and either auto-approves or opens the approval chain) — is Agent B's.
+ * The read side (board, dashboard, list, detail) and the whole write side —
+ * line management with optimistic concurrency, the live preview, and
+ * `POST /:id/submit`, which computes the blended risk and either
+ * auto-approves the quotation or opens the approval chain — are Agent B's.
  */
 import { Router } from 'express';
+import { Types } from 'mongoose';
+import { z } from 'zod';
 import {
+  ApprovalAction,
+  ApprovalStatus,
+  ApprovalStepStatus,
+  AuditEntity,
   KANBAN_STAGES,
   QuoteStage,
+  Role,
   STAGE_LABEL,
   TERMINAL_STAGES,
+  addDays,
+  calculateBlendedRisk,
+  computeLinePricing,
+  computeQuoteTotals,
   type ActivityItemDto,
+  type CreateQuotationRequest,
   type KanbanBoardDto,
+  type LinePricingInput,
+  type PricedLine,
+  type QuotationDto,
+  type QuotationLineInput,
+  type QuotationPreviewDto,
   type QuotationSummaryDto,
   type SalesDashboardDto,
+  type SubmitQuotationResponse,
+  type UpdateQuotationRequest,
 } from '@dealflow/shared';
-import { Approval, AuditLog, DealAlert, Quotation } from '../../db/models.js';
+import { Approval, AuditLog, Customer, DealAlert, Quotation, User, nextSeq } from '../../db/models.js';
 import { requireAuth } from '../../middleware/auth.js';
+import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { ok } from '../../utils/respond.js';
-import { toDtoList } from '../../utils/serialize.js';
+import { invalidState, notFound, staleVersion } from '../../utils/apiError.js';
+import { created, ok, paginate } from '../../utils/respond.js';
+import { toDto, toDtoList } from '../../utils/serialize.js';
+import { writeAudit } from '../../utils/audit.js';
 import { mountModuleHealth } from '../module.health.js';
-import { mountReadonly } from '../readonly.factory.js';
+import { loadRiskConfig } from '../config/config.service.js';
+import { priceLinesForCustomer } from '../pricing/pricing.service.js';
 
 export const quotationsRouter = Router();
 
+const WRITE_ROLES: Role[] = [Role.SALES_REP, Role.SALES_MANAGER, Role.ADMIN];
+
 mountModuleHealth(quotationsRouter, {
   module: 'quotations', owner: 'B', screens: [2, 3, 4],
-  implemented: ['GET /', 'GET /:id', 'GET /board', 'GET /dashboard'],
-  todo: [
-    'POST / — create a quotation for a customer (Agent B)',
-    'PATCH /:id — line add/remove/qty/discount with optimistic-concurrency version check (Agent B)',
-    'POST /preview — server-side echo of the client-side live preview (Agent B)',
-    'POST /:id/submit — compute risk, then auto-approve or open the approval chain (Agent B) [BLOCKING for Agent C]',
+  implemented: [
+    'GET /', 'GET /:id', 'GET /board', 'GET /dashboard', 'GET /:id/audit',
+    'POST /', 'PATCH /:id', 'POST /preview', 'POST /:id/submit',
   ],
+  todo: [],
 });
 
 function summarise(q: any): QuotationSummaryDto {
@@ -46,6 +70,71 @@ function summarise(q: any): QuotationSummaryDto {
     updatedAt: q.updatedAt?.toISOString?.() ?? new Date(q.updatedAt).toISOString(),
     lineCount: q.lines?.length ?? 0,
   };
+}
+
+/**
+ * The embedded line's own identity field is `lineId` in Mongoose (it sits
+ * next to `productId`, and "id" would have read as a typo for `_id`), but
+ * every wire DTO — and the Angular builder — addresses a line by `.id`. This
+ * is the one seam where that gets translated back.
+ */
+function toQuotationDto(doc: unknown): QuotationDto {
+  const dto = toDto<any>(doc);
+  if (Array.isArray(dto.lines)) {
+    dto.lines = dto.lines.map((l: any) => {
+      const { lineId, ...rest } = l;
+      return { id: lineId, ...rest };
+    });
+  }
+  return dto as QuotationDto;
+}
+
+/** The embedded schema's own field, kept out of the public helper above. */
+function toLineDoc(l: PricedLine) {
+  return {
+    lineId: l.id,
+    productId: new Types.ObjectId(l.productId),
+    productName: l.productName,
+    sku: l.sku,
+    category: l.category,
+    qty: l.qty,
+    unitPrice: l.unitPrice,
+    costPrice: l.costPrice,
+    discountPct: l.discountPct,
+    allowedDiscountPct: l.allowedDiscountPct,
+    taxPct: l.taxPct,
+    isSubscription: l.isSubscription,
+    recurringCycle: l.recurringCycle,
+    selectedVariants: l.selectedVariants,
+    addedFromUpsell: l.addedFromUpsell,
+    lineGross: l.lineGross,
+    lineDiscount: l.lineDiscount,
+    lineNet: l.lineNet,
+    lineTax: l.lineTax,
+    lineTotal: l.lineTotal,
+    lineCost: l.lineCost,
+    lineMargin: l.lineMargin,
+    marginPct: l.marginPct,
+    discountStatus: l.discountStatus,
+    overByPts: l.overByPts,
+  };
+}
+
+/** Keeps new line ids monotonic and collision-free even after lines are removed. */
+function nextLineNumber(existingLineIds: string[], number: string): number {
+  const re = new RegExp(`^${number.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-L(\\d+)$`);
+  let max = 0;
+  for (const id of existingLineIds) {
+    const match = re.exec(id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return max + 1;
+}
+
+/** Who a step lands on. Screen 5/6's "Assigned To" column. */
+async function resolveAssignee(role: Role): Promise<string | undefined> {
+  const user = await User.findOne({ role, active: true }).lean();
+  return (user as any)?.name;
 }
 
 /** Screen 3's Kanban board. */
@@ -117,9 +206,358 @@ quotationsRouter.get(
   }),
 );
 
-mountReadonly(quotationsRouter, {
-  model: Quotation,
-  sort: { lastActivityAt: -1 },
-  searchFields: ['number', 'customerName'],
-  filterFields: ['stage', 'ownerId', 'customerId'],
+/* ------------------------------------------------------------------ writes */
+
+const lineInputSchema = z.object({
+  id: z.string().optional(),
+  productId: z.string().min(1),
+  qty: z.number().min(0),
+  discountPct: z.number().min(0).max(100).default(0),
+  selectedVariants: z.record(z.string()).optional(),
+  addedFromUpsell: z.boolean().optional(),
 });
+
+const createSchema = z.object({
+  customerId: z.string().min(1),
+  promisedDeliveryDate: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+const updateSchema = z.object({
+  lines: z.array(lineInputSchema).optional(),
+  promisedDeliveryDate: z.string().nullable().optional(),
+  notes: z.string().optional(),
+  version: z.number().int(),
+});
+
+const previewSchema = z.object({
+  customerId: z.string().min(1),
+  lines: z.array(lineInputSchema).default([]),
+});
+
+const submitSchema = z.object({ reason: z.string().optional() }).default({});
+
+/** A blank draft against a customer — screen 3's "+ New Quotation". */
+quotationsRouter.post(
+  '/',
+  requireAuth(WRITE_ROLES),
+  validate(createSchema),
+  asyncHandler(async (req, res) => {
+    const body = req.body as CreateQuotationRequest;
+    const customer = await Customer.findById(body.customerId).lean();
+    if (!customer) throw notFound(`No customer with id ${body.customerId}`);
+
+    const riskConfig = await loadRiskConfig();
+    const totals = computeQuoteTotals([]);
+    const risk = calculateBlendedRisk([], (customer as any).tier, riskConfig);
+    const now = new Date();
+
+    const doc = await Quotation.create({
+      number: `Q-${await nextSeq('quotation', 2000)}`,
+      customerId: (customer as any)._id,
+      customerName: (customer as any).name,
+      tier: (customer as any).tier,
+      priceListId: (customer as any).priceListId,
+      currency: (customer as any).currency,
+      ownerId: req.user!.id,
+      ownerName: req.user!.name,
+      stage: QuoteStage.DRAFT,
+      lines: [],
+      totals,
+      risk,
+      validUntil: addDays(now, 30),
+      promisedDeliveryDate: body.promisedDeliveryDate ? new Date(body.promisedDeliveryDate) : undefined,
+      lastActivityAt: now,
+      version: 1,
+      notes: body.notes,
+    });
+
+    await writeAudit({
+      actor: { id: req.user!.id, name: req.user!.name, role: req.user!.role },
+      action: 'QUOTATION_CREATED',
+      entity: AuditEntity.QUOTATION,
+      entityId: String(doc._id),
+      entityLabel: doc.number,
+      reason: `New quotation for ${doc.customerName}`,
+    });
+
+    created(res, toQuotationDto(doc));
+  }),
+);
+
+/**
+ * Line add / remove / qty / discount, guarded by optimistic concurrency.
+ * A line with no `id` is added; an omitted line is removed. Only a DRAFT
+ * quotation is editable — once it is out for approval, in negotiation or
+ * confirmed, this is a 409, not a silent no-op.
+ */
+quotationsRouter.patch(
+  '/:id',
+  requireAuth(WRITE_ROLES),
+  validate(updateSchema),
+  asyncHandler(async (req, res) => {
+    const doc = await Quotation.findById(req.params.id);
+    if (!doc) throw notFound(`No quotation with id ${req.params.id}`);
+
+    const body = req.body as UpdateQuotationRequest;
+    if (body.version !== doc.version) throw staleVersion();
+    if (doc.stage !== QuoteStage.DRAFT) {
+      throw invalidState(
+        `Only a draft quotation can be edited. This one is ${STAGE_LABEL[doc.stage as QuoteStage]}.`,
+      );
+    }
+
+    const before = { lineCount: doc.lines.length, grandTotal: doc.totals?.grandTotal ?? 0 };
+
+    if (body.lines) {
+      const existingIds = (doc.lines as any[]).map((l) => l.lineId);
+      let nextSuffix = nextLineNumber(existingIds, doc.number);
+      const inputLines: QuotationLineInput[] = body.lines.map((line) =>
+        line.id ? line : { ...line, id: `${doc.number}-L${nextSuffix++}` },
+      );
+
+      const riskConfig = await loadRiskConfig();
+      const { tier, priced } = await priceLinesForCustomer(String(doc.customerId), inputLines, riskConfig);
+      const totals = computeQuoteTotals(priced);
+      const risk = calculateBlendedRisk(
+        priced.map((l) => ({
+          id: l.id, productName: l.productName, category: l.category,
+          qty: l.qty, unitPrice: l.unitPrice, discountPct: l.discountPct,
+          allowedDiscountPct: l.allowedDiscountPct,
+        })),
+        tier,
+        riskConfig,
+      );
+
+      doc.lines = priced.map(toLineDoc) as any;
+      doc.totals = totals as any;
+      doc.risk = risk as any;
+    }
+
+    if (body.promisedDeliveryDate !== undefined) {
+      doc.promisedDeliveryDate = body.promisedDeliveryDate ? new Date(body.promisedDeliveryDate) : undefined;
+    }
+    if (body.notes !== undefined) doc.notes = body.notes;
+
+    doc.version += 1;
+    doc.lastActivityAt = new Date();
+    await doc.save();
+
+    const after = { lineCount: doc.lines.length, grandTotal: doc.totals?.grandTotal ?? 0 };
+    if (before.lineCount !== after.lineCount || before.grandTotal !== after.grandTotal) {
+      await writeAudit({
+        actor: { id: req.user!.id, name: req.user!.name, role: req.user!.role },
+        action: 'QUOTATION_UPDATED',
+        entity: AuditEntity.QUOTATION,
+        entityId: String(doc._id),
+        entityLabel: doc.number,
+        before,
+        after,
+        reason: 'Draft edited',
+      });
+    }
+
+    ok(res, toQuotationDto(doc));
+  }),
+);
+
+/**
+ * The server-side echo of the client's optimistic preview. It exists to
+ * CONFIRM the numbers the builder already computed locally, not to produce
+ * them — the Angular store calls the same pure functions on every keystroke.
+ */
+quotationsRouter.post(
+  '/preview',
+  requireAuth(WRITE_ROLES),
+  validate(previewSchema),
+  asyncHandler(async (req, res) => {
+    const body = req.body as { customerId: string; lines: QuotationLineInput[] };
+    const riskConfig = await loadRiskConfig();
+    const { tier, priced } = await priceLinesForCustomer(body.customerId, body.lines, riskConfig);
+
+    const risk = calculateBlendedRisk(
+      priced.map((l) => ({
+        id: l.id, productName: l.productName, category: l.category,
+        qty: l.qty, unitPrice: l.unitPrice, discountPct: l.discountPct,
+        allowedDiscountPct: l.allowedDiscountPct,
+      })),
+      tier,
+      riskConfig,
+    );
+
+    const payload: QuotationPreviewDto = { lines: priced as any, totals: computeQuoteTotals(priced), risk };
+    ok(res, payload);
+  }),
+);
+
+/**
+ * THE HANDOFF. Recomputes the blended risk server-side and either auto-approves
+ * the quotation or opens the approval chain from `risk.requiredChain` — the rep
+ * never chooses. A quotation returned for revision reopens its EXISTING
+ * approval record on resubmit rather than creating a second one, so the audit
+ * trail reads Submitted / Returned / Resubmitted in one continuous story.
+ */
+quotationsRouter.post(
+  '/:id/submit',
+  requireAuth(WRITE_ROLES),
+  validate(submitSchema),
+  asyncHandler(async (req, res) => {
+    const doc = await Quotation.findById(req.params.id);
+    if (!doc) throw notFound(`No quotation with id ${req.params.id}`);
+    if (doc.stage !== QuoteStage.DRAFT) {
+      throw invalidState(
+        `Only a draft quotation can be submitted. This one is ${STAGE_LABEL[doc.stage as QuoteStage]}.`,
+      );
+    }
+    if (doc.lines.length === 0) throw invalidState('Add at least one line before submitting.');
+
+    const riskConfig = await loadRiskConfig();
+    // Re-price every line against the CURRENT configuration — ceilings may
+    // have moved since the draft was last saved, and the rep's own preview is
+    // only ever a preview.
+    const linesInput: LinePricingInput[] = (doc.lines as any[]).map((l) => ({
+      id: l.lineId,
+      productId: String(l.productId),
+      productName: l.productName,
+      sku: l.sku,
+      category: l.category,
+      qty: l.qty,
+      unitPrice: l.unitPrice,
+      costPrice: l.costPrice,
+      discountPct: l.discountPct,
+      taxPct: l.taxPct,
+      isSubscription: l.isSubscription,
+      recurringCycle: l.recurringCycle,
+      selectedVariants: l.selectedVariants,
+      addedFromUpsell: l.addedFromUpsell,
+    }));
+    const priced: PricedLine[] = linesInput.map((line) => computeLinePricing(line, doc.tier, riskConfig));
+    const risk = calculateBlendedRisk(
+      priced.map((l) => ({
+        id: l.id, productName: l.productName, category: l.category,
+        qty: l.qty, unitPrice: l.unitPrice, discountPct: l.discountPct,
+        allowedDiscountPct: l.allowedDiscountPct,
+      })),
+      doc.tier,
+      riskConfig,
+    );
+    doc.lines = priced.map(toLineDoc) as any;
+    doc.totals = computeQuoteTotals(priced) as any;
+    doc.risk = risk as any;
+
+    const now = new Date();
+    const autoApproved = risk.requiredChain.length === 0;
+    const body = req.body as { reason?: string };
+    const actor = { id: req.user!.id, name: req.user!.name, role: req.user!.role };
+
+    const existing = doc.approvalId ? await Approval.findById(doc.approvalId) : null;
+    const isResubmit = !!existing && existing.status === ApprovalStatus.RETURNED;
+    const approval = isResubmit ? existing! : new Approval({
+      quotationId: doc._id, quotationNumber: doc.number,
+      customerId: doc.customerId, customerName: doc.customerName, tier: doc.tier,
+      ownerId: doc.ownerId, ownerName: doc.ownerName, currency: doc.currency,
+      trail: [],
+    });
+
+    approval.amount = doc.totals.grandTotal;
+    approval.risk = risk as any;
+
+    const action: ApprovalAction = autoApproved
+      ? ApprovalAction.AUTO_APPROVED
+      : isResubmit
+        ? ApprovalAction.RESUBMITTED
+        : ApprovalAction.SUBMITTED;
+    const defaultReason = autoApproved
+      ? 'Blended risk score 0 — no approval required'
+      : isResubmit
+        ? 'Resubmitted for approval'
+        : 'Submitted for approval';
+    const reason = body.reason?.trim() || defaultReason;
+
+    if (autoApproved) {
+      approval.status = ApprovalStatus.NOT_REQUIRED;
+      approval.steps = [];
+      approval.currentStepIndex = -1;
+      approval.currentStage = undefined;
+      approval.assignedToName = undefined;
+      approval.decidedAt = now;
+      approval.cycleTimeMs = approval.submittedAt ? now.getTime() - approval.submittedAt.getTime() : 0;
+    } else {
+      approval.status = ApprovalStatus.PENDING;
+      approval.steps = risk.requiredChain.map((role, i) => ({
+        role,
+        status: i === 0 ? ApprovalStepStatus.ACTIVE : ApprovalStepStatus.PENDING,
+        activatedAt: i === 0 ? now : undefined,
+      })) as any;
+      approval.currentStepIndex = 0;
+      approval.currentStage = risk.requiredChain[0];
+      approval.assignedToName = await resolveAssignee(risk.requiredChain[0]);
+      approval.decidedAt = undefined;
+      approval.reEnteredFromNegotiation = false;
+    }
+    approval.submittedAt = approval.submittedAt ?? now;
+    approval.trail.push({ actorId: actor.id as any, actorName: actor.name, role: actor.role, action, reason, at: now } as any);
+    await approval.save();
+
+    doc.approvalId = approval._id;
+    doc.stage = autoApproved ? QuoteStage.APPROVED : QuoteStage.PENDING_APPROVAL;
+    doc.submittedAt = doc.submittedAt ?? now;
+    doc.version += 1;
+    doc.lastActivityAt = now;
+    await doc.save();
+
+    await writeAudit({
+      actor,
+      action,
+      entity: AuditEntity.APPROVAL,
+      entityId: String(doc._id),
+      entityLabel: doc.number,
+      after: { riskScore: risk.riskScore, riskLevel: risk.riskLevel, chain: risk.requiredChain },
+      reason,
+    });
+
+    const payload: SubmitQuotationResponse = {
+      quotation: toQuotationDto(doc),
+      approval: autoApproved ? null : toDto(approval),
+      autoApproved,
+      risk,
+    };
+    ok(res, payload);
+  }),
+);
+
+/* ------------------------------------------------------------------ reads */
+
+quotationsRouter.get(
+  '/:id',
+  requireAuth(),
+  asyncHandler(async (req, res) => {
+    const doc = await Quotation.findById(req.params.id).lean();
+    if (!doc) throw notFound(`No quotation with id ${req.params.id}`);
+    ok(res, toQuotationDto(doc));
+  }),
+);
+
+quotationsRouter.get(
+  '/',
+  requireAuth(),
+  asyncHandler(async (req, res) => {
+    const page = Math.max(1, Number(req.query.page ?? 1));
+    const pageSize = Math.min(500, Math.max(1, Number(req.query.pageSize ?? 50)));
+    const filter: Record<string, unknown> = {};
+    for (const field of ['stage', 'ownerId', 'customerId']) {
+      const value = (req.query as Record<string, unknown>)[field];
+      if (value !== undefined && value !== '') filter[field] = value;
+    }
+    const q = req.query.q as string | undefined;
+    if (q) {
+      filter.$or = [{ number: { $regex: q, $options: 'i' } }, { customerName: { $regex: q, $options: 'i' } }];
+    }
+
+    const [items, total] = await Promise.all([
+      Quotation.find(filter).sort({ lastActivityAt: -1 }).skip((page - 1) * pageSize).limit(pageSize).lean(),
+      Quotation.countDocuments(filter),
+    ]);
+    ok(res, items.map(toQuotationDto), paginate([], page, pageSize, total));
+  }),
+);

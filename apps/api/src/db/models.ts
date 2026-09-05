@@ -759,7 +759,15 @@ export async function syncAllIndexes(): Promise<{ model: string; indexes: number
   return out;
 }
 
-/** Next value of a named sequence. */
+/**
+ * Next value of a named sequence, starting at `start` on its first call.
+ * The raw counter always begins at 0 and increments by exactly 1 per call —
+ * `start + seq - 1` is what turns "the 1st call" into `start` and keeps every
+ * later call strictly increasing, whatever `start` is. (Clamping a small `seq`
+ * up to `start` on every call, as a naive read might suggest, would hand out
+ * `start` again on the 2nd call, the 3rd, ... until `seq` finally exceeds it —
+ * duplicate numbers for the first `start` calls.)
+ */
 export async function nextSeq(name: string, start = 1000): Promise<number> {
   const doc = await Counter.findByIdAndUpdate(
     name,
@@ -767,5 +775,5 @@ export async function nextSeq(name: string, start = 1000): Promise<number> {
     { new: true, upsert: true, setDefaultsOnInsert: true },
   );
   const seq = doc.seq as number;
-  return seq < start ? start : seq;
+  return start + seq - 1;
 }

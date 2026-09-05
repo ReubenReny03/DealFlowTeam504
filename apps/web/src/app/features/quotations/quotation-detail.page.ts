@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { CATEGORY_LABEL } from '@dealflow/shared';
+import { CATEGORY_LABEL, STAGE_LABEL } from '@dealflow/shared';
 import { QuotationBuilderStore } from '../../core/state/quotation-builder.store';
+import { ToastStore } from '../../core/state/toast.store';
 import { ErrorStateComponent, LoadingComponent, MoneyPipe, StatusChipComponent } from '../../shared/ui';
 
 /**
@@ -35,11 +36,21 @@ import { ErrorStateComponent, LoadingComponent, MoneyPipe, StatusChipComponent }
             <span class="df-muted">Price list: {{ q.tier }}</span>
           </div>
         </div>
-        <div class="flex gap-2">
-          <button type="button" class="df-btn-ghost" [disabled]="!store.isDirty()" (click)="store.reset()">Discard changes</button>
-          <button type="button" class="df-btn-ghost" (click)="saveDraft()">Save Draft</button>
-          <button type="button" class="df-btn-primary" (click)="submit()">Submit for Approval</button>
-        </div>
+        @if (store.editable()) {
+          <div class="flex gap-2">
+            <button type="button" class="df-btn-ghost" [disabled]="!store.isDirty() || store.saving()" (click)="store.reset()">Discard changes</button>
+            <button type="button" class="df-btn-ghost" [disabled]="store.saving()" (click)="saveDraft()">
+              {{ store.saving() ? 'Saving…' : 'Save Draft' }}
+            </button>
+            <button type="button" class="df-btn-primary" [disabled]="store.saving() || !store.pricedLines().length" (click)="submit()">
+              {{ store.saving() ? 'Submitting…' : 'Submit for Approval' }}
+            </button>
+          </div>
+        } @else {
+          <p class="rounded-lg bg-slate-50 px-3 py-1.5 text-xs text-slate-500">
+            This quotation is {{ stageLabel(q.stage) }} and read-only. Line edits only apply to a draft.
+          </p>
+        }
       </div>
 
       <div class="mt-6 grid gap-6 xl:grid-cols-3">
@@ -70,16 +81,24 @@ import { ErrorStateComponent, LoadingComponent, MoneyPipe, StatusChipComponent }
                       </p>
                     </td>
                     <td class="df-td text-right">
-                      <input class="df-input !w-20 text-right" type="number" min="0" [ngModel]="line.qty"
-                             (ngModelChange)="store.setQty(line.id, +$event)" [attr.aria-label]="'Quantity for ' + line.productName" />
+                      @if (store.editable()) {
+                        <input class="df-input !w-20 text-right" type="number" min="0" [ngModel]="line.qty"
+                               (ngModelChange)="store.setQty(line.id, +$event)" [attr.aria-label]="'Quantity for ' + line.productName" />
+                      } @else {
+                        {{ line.qty }}
+                      }
                     </td>
                     <td class="df-td text-right font-mono">{{ line.unitPrice | money }}</td>
                     <td class="df-td text-right">
-                      <div class="flex items-center justify-end gap-1">
-                        <input class="df-input !w-16 text-right" type="number" min="0" max="100" [ngModel]="line.discountPct"
-                               (ngModelChange)="store.setDiscount(line.id, +$event)" [attr.aria-label]="'Discount for ' + line.productName" />
-                        <span class="text-xs text-slate-400">%</span>
-                      </div>
+                      @if (store.editable()) {
+                        <div class="flex items-center justify-end gap-1">
+                          <input class="df-input !w-16 text-right" type="number" min="0" max="100" [ngModel]="line.discountPct"
+                                 (ngModelChange)="store.setDiscount(line.id, +$event)" [attr.aria-label]="'Discount for ' + line.productName" />
+                          <span class="text-xs text-slate-400">%</span>
+                        </div>
+                      } @else {
+                        {{ line.discountPct }}%
+                      }
                     </td>
                     <td class="df-td text-right font-mono text-slate-500">{{ line.allowedDiscountPct }}%</td>
                     <td class="df-td">
@@ -91,8 +110,10 @@ import { ErrorStateComponent, LoadingComponent, MoneyPipe, StatusChipComponent }
                     </td>
                     <td class="df-td text-right font-semibold">{{ line.lineTotal | money }}</td>
                     <td class="df-td text-right">
-                      <button type="button" class="text-slate-300 hover:text-rose-600" [attr.aria-label]="'Remove ' + line.productName"
-                              (click)="store.removeLine(line.id)">✕</button>
+                      @if (store.editable()) {
+                        <button type="button" class="text-slate-300 hover:text-rose-600" [attr.aria-label]="'Remove ' + line.productName"
+                                (click)="store.removeLine(line.id)">✕</button>
+                      }
                     </td>
                   </tr>
                 } @empty {
@@ -108,6 +129,7 @@ import { ErrorStateComponent, LoadingComponent, MoneyPipe, StatusChipComponent }
           </p>
 
           <!-- add a product -->
+          @if (store.editable()) {
           <div class="mt-4 flex items-end gap-2">
             <label class="flex-1">
               <span class="df-label">Add a product</span>
@@ -120,6 +142,7 @@ import { ErrorStateComponent, LoadingComponent, MoneyPipe, StatusChipComponent }
             </label>
             <button type="button" class="df-btn-ghost" [disabled]="!pickedProductId" (click)="addPicked()">Add line</button>
           </div>
+          }
         </section>
 
         <!-- totals, risk, upsell -->
@@ -183,18 +206,19 @@ import { ErrorStateComponent, LoadingComponent, MoneyPipe, StatusChipComponent }
                         @if (s.promoTag) { <p class="text-xs text-brand-600">{{ s.promoTag }}</p> }
                         <p class="mt-1 text-[11px] leading-snug text-slate-400">{{ s.reason }}</p>
                       </div>
-                      <div class="flex shrink-0 flex-col gap-1">
-                        <button type="button" class="df-btn-primary !px-2 !py-1 text-xs" (click)="store.addSuggestion(s)">Add to Quote</button>
-                        <button type="button" class="text-xs text-slate-400 hover:text-slate-600" (click)="store.dismissSuggestion(s.productId)">Dismiss</button>
-                      </div>
+                      @if (store.editable()) {
+                        <div class="flex shrink-0 flex-col gap-1">
+                          <button type="button" class="df-btn-primary !px-2 !py-1 text-xs" (click)="store.addSuggestion(s)">Add to Quote</button>
+                          <button type="button" class="text-xs text-slate-400 hover:text-slate-600" (click)="store.dismissSuggestion(s.productId)">Dismiss</button>
+                        </div>
+                      }
                     </div>
                   </li>
                 }
               </ul>
             } @else {
               <p class="mt-3 text-sm leading-relaxed text-slate-500">
-                No suggestions right now. The ranking endpoint (<code class="text-xs">GET /upsell/suggestions</code>) is Agent B's —
-                see docs/AGENT_B.md task B-6. Adding any line from the picker above still updates the margin instantly.
+                Nothing to suggest yet — add a line, and any product bought alongside it in past deals will be ranked here.
               </p>
             }
           </div>
@@ -206,6 +230,7 @@ import { ErrorStateComponent, LoadingComponent, MoneyPipe, StatusChipComponent }
 })
 export class QuotationDetailPage implements OnInit {
   protected readonly store = inject(QuotationBuilderStore);
+  private readonly toast = inject(ToastStore);
   /** Bound from the route by `withComponentInputBinding()`. */
   readonly id = input<string>('');
 
@@ -218,24 +243,43 @@ export class QuotationDetailPage implements OnInit {
     return CATEGORY_LABEL[category as keyof typeof CATEGORY_LABEL] ?? category;
   }
 
+  stageLabel(stage: string): string {
+    return STAGE_LABEL[stage as keyof typeof STAGE_LABEL] ?? stage;
+  }
+
   addPicked(): void {
     const product = this.store.products().find((p) => p.id === this.pickedProductId);
     if (product) this.store.addProduct(product);
     this.pickedProductId = '';
   }
 
-  /** AGENT B: PATCH /quotations/:id with the draft lines and the version guard. */
-  saveDraft(): void {
-    alert('Save Draft — Agent B wires this to PATCH /api/v1/quotations/:id (docs/AGENT_B.md, task B-4).');
+  async saveDraft(): Promise<void> {
+    try {
+      const ok = await this.store.save();
+      if (ok) this.toast.success('Draft saved', 'Every total, margin and risk figure is exactly what the server now has too.');
+    } catch {
+      /* the interceptor already toasted the reason — a stale version says "reload and try again" */
+    }
   }
 
-  /** AGENT B: POST /quotations/:id/submit — computes risk, then auto-approves or opens the chain. */
-  submit(): void {
-    const risk = this.store.risk();
-    alert(
-      `Submit for Approval — Agent B wires this to POST /api/v1/quotations/:id/submit (docs/AGENT_B.md, task B-7).\n\n` +
-      `The preview already knows the answer: score ${risk.riskScore} (${risk.riskLevel}) → ` +
-      (risk.requiredChain.length ? risk.requiredChain.join(' then ') : 'auto-approved, no human step') + '.',
-    );
+  /**
+   * The rep never chooses what happens next — the server decides, from the
+   * SAME blended risk score this screen has been showing all along.
+   */
+  async submit(): Promise<void> {
+    try {
+      const result = await this.store.submit();
+      if (!result) return;
+      if (result.autoApproved) {
+        this.toast.success('Submitted', 'Every line was within its own limit — this quotation went straight to Approved. No approval needed.');
+      } else {
+        this.toast.info(
+          'Routed for approval',
+          `Blended risk ${result.risk.riskScore} (${result.risk.riskLevel}) — this needs ${result.risk.requiredChain.join(', then ')}.`,
+        );
+      }
+    } catch {
+      /* the interceptor already toasted the reason */
+    }
   }
 }

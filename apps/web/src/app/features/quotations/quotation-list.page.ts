@@ -1,18 +1,25 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { EMPTY_STATES, type KanbanBoardDto, type QuotationSummaryDto } from '@dealflow/shared';
+import {
+  EMPTY_STATES, TIER_LABEL, type CustomerDto, type KanbanBoardDto, type QuotationDto, type QuotationSummaryDto,
+} from '@dealflow/shared';
 import { ApiService } from '../../core/api/api.service';
+import { ToastStore } from '../../core/state/toast.store';
 import {
   AgoPipe, ColumnDef, DataTableComponent, EmptyStateComponent, ErrorStateComponent,
-  KanbanBoardComponent, LoadingComponent, MoneyPipe, StatusChipComponent,
+  KanbanBoardComponent, LoadingComponent, ModalComponent, MoneyPipe, StatusChipComponent,
 } from '../../shared/ui';
 
 /** Screen 3 — Quotations, as a Kanban pipeline or a flat table. */
 @Component({
   selector: 'df-quotation-list',
   standalone: true,
-  imports: [KanbanBoardComponent, DataTableComponent, LoadingComponent, ErrorStateComponent, EmptyStateComponent, MoneyPipe, AgoPipe, StatusChipComponent],
+  imports: [
+    FormsModule, KanbanBoardComponent, DataTableComponent, LoadingComponent, ErrorStateComponent,
+    EmptyStateComponent, ModalComponent, MoneyPipe, AgoPipe, StatusChipComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -57,17 +64,48 @@ import {
         </df-data-table>
       </div>
     }
+
+    <df-modal [open]="pickerOpen()" title="New quotation" subtitle="Their tier and price list come with them." (close)="pickerOpen.set(false)">
+      @if (customersLoading()) {
+        <df-loading [count]="3" label="Loading customers" />
+      } @else if (customers().length) {
+        <label class="block">
+          <span class="df-label">Customer</span>
+          <select class="df-input" [(ngModel)]="pickedCustomerId">
+            @for (c of customers(); track c.id) {
+              <option [value]="c.id">{{ c.name }} — {{ tierLabel[c.tier] }}</option>
+            }
+          </select>
+        </label>
+        <div class="mt-5 flex justify-end gap-2">
+          <button type="button" class="df-btn-ghost" (click)="pickerOpen.set(false)">Cancel</button>
+          <button type="button" class="df-btn-primary" [disabled]="!pickedCustomerId || creating()" (click)="confirmCreate()">
+            {{ creating() ? 'Creating…' : 'Create quotation' }}
+          </button>
+        </div>
+      } @else {
+        <p class="text-sm text-slate-600">No customers are configured yet. An admin needs to add one first.</p>
+      }
+    </df-modal>
   `,
 })
 export class QuotationListPage implements OnInit {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  private readonly toast = inject(ToastStore);
 
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly board = signal<KanbanBoardDto | null>(null);
   protected readonly view = signal<'kanban' | 'table'>('kanban');
   protected readonly empty = EMPTY_STATES['quotations'];
+  protected readonly tierLabel = TIER_LABEL;
+
+  protected readonly pickerOpen = signal(false);
+  protected readonly customersLoading = signal(false);
+  protected readonly creating = signal(false);
+  protected readonly customers = signal<CustomerDto[]>([]);
+  pickedCustomerId = '';
 
   protected readonly columns: ColumnDef<QuotationSummaryDto>[] = [
     { key: 'number', header: 'Quotation', value: (r) => r.number, mono: true, width: '9rem' },
@@ -105,8 +143,34 @@ export class QuotationListPage implements OnInit {
   toggleView(): void { this.view.update((v) => (v === 'kanban' ? 'table' : 'kanban')); }
   open(card: QuotationSummaryDto): void { void this.router.navigate(['/app/quotations', card.id]); }
 
-  /** AGENT B: replace with a customer picker that POSTs /quotations. */
-  create(): void {
-    alert('New Quotation — Agent B wires this to POST /api/v1/quotations (see docs/AGENT_B.md, task B-3).');
+  async create(): Promise<void> {
+    this.pickedCustomerId = '';
+    this.pickerOpen.set(true);
+    if (this.customers().length) return;
+    this.customersLoading.set(true);
+    try {
+      this.customers.set(await firstValueFrom(this.api.get<CustomerDto[]>('/customers', { pageSize: 200 })));
+    } catch {
+      this.customers.set([]);
+    } finally {
+      this.customersLoading.set(false);
+    }
+  }
+
+  async confirmCreate(): Promise<void> {
+    if (!this.pickedCustomerId) return;
+    this.creating.set(true);
+    try {
+      const quotation = await firstValueFrom(
+        this.api.post<QuotationDto>('/quotations', { customerId: this.pickedCustomerId }),
+      );
+      this.pickerOpen.set(false);
+      this.toast.success('Quotation created', `${quotation.number} for ${quotation.customerName} — add lines to get started.`);
+      await this.router.navigate(['/app/quotations', quotation.id]);
+    } catch {
+      /* the interceptor already toasted the reason */
+    } finally {
+      this.creating.set(false);
+    }
   }
 }

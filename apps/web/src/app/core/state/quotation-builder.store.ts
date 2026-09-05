@@ -7,12 +7,16 @@ import {
   computeQuoteTotals,
   CustomerTier,
   isAutoApproved,
+  QuoteStage,
   type ApprovalChainConfigDto,
   type LinePricingInput,
   type PricedLine,
   type ProductDto,
   type QuotationDto,
+  type QuotationLineInput,
   type RiskConfig,
+  type SubmitQuotationResponse,
+  type UpdateQuotationRequest,
   type UpsellSuggestionDto,
 } from '@dealflow/shared';
 import { ApiService } from '../api/api.service';
@@ -92,6 +96,9 @@ export class QuotationBuilderStore {
   readonly willAutoApprove = computed(() => isAutoApproved(this.risk()));
   readonly overLines = computed(() => this.pricedLines().filter((l) => l.discountStatus === 'OVER'));
   readonly isDirty = signal(false);
+
+  /** Only a DRAFT quotation accepts edits — the API enforces this too. */
+  readonly editable = computed(() => (this.quotation()?.stage ?? QuoteStage.DRAFT) === QuoteStage.DRAFT);
 
   /* ------------------------------------------------------------ loading */
 
@@ -186,6 +193,65 @@ export class QuotationBuilderStore {
     const q = this.quotation();
     this.draftLines.set(q ? q.lines.map(toInput) : []);
     this.isDirty.set(false);
+  }
+
+  /**
+   * PATCH the draft with the version last read. A line the rep added locally
+   * (its id still carries the `tmp-` scratch prefix `addProduct()` gives it)
+   * is sent WITHOUT an id, so the server assigns the canonical one; every
+   * other line keeps the id the server already knows it by.
+   */
+  async save(): Promise<boolean> {
+    const q = this.quotation();
+    if (!q) return false;
+    const body: UpdateQuotationRequest = {
+      version: q.version,
+      lines: this.draftLines().map((l): QuotationLineInput => ({
+        id: l.id.startsWith('tmp-') ? undefined : l.id,
+        productId: l.productId,
+        qty: l.qty,
+        discountPct: l.discountPct,
+        selectedVariants: l.selectedVariants,
+        addedFromUpsell: l.addedFromUpsell,
+      })),
+    };
+    this.saving.set(true);
+    try {
+      const saved = await firstValueFrom(this.api.patch<QuotationDto>(`/quotations/${q.id}`, body));
+      this.quotation.set(saved);
+      this.draftLines.set(saved.lines.map(toInput));
+      this.isDirty.set(false);
+      return true;
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  /**
+   * The single most important write in the product. Saves the draft first
+   * (so what gets submitted is exactly what is on screen), then submits —
+   * the server recomputes the blended risk and either auto-approves the
+   * quotation or opens the approval chain. The rep never chooses.
+   */
+  async submit(): Promise<SubmitQuotationResponse | null> {
+    const q = this.quotation();
+    if (!q) return null;
+    if (this.isDirty()) {
+      const ok = await this.save();
+      if (!ok) return null;
+    }
+    const current = this.quotation()!;
+    this.saving.set(true);
+    try {
+      const result = await firstValueFrom(
+        this.api.post<SubmitQuotationResponse>(`/quotations/${current.id}/submit`, {}),
+      );
+      this.quotation.set(result.quotation);
+      this.draftLines.set(result.quotation.lines.map(toInput));
+      return result;
+    } finally {
+      this.saving.set(false);
+    }
   }
 }
 
