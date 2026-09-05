@@ -1,12 +1,14 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import {
   APPROVAL_SLA_HOURS,
   EMPTY_STATES,
   RISK_LEVEL_LABEL,
+  Role,
   type ApprovalDto,
 } from '@dealflow/shared';
 import { ApprovalStore } from '../../core/state/feature.stores';
+import { SessionStore } from '../../core/state/session.store';
 import {
   AgoPipe,
   ColumnDef,
@@ -40,9 +42,16 @@ import {
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="df-h1">Approvals</h1>
-        <p class="df-muted mt-1">
-          Quotations only land here when their blended risk score requires a human.
-        </p>
+        @if (financeScoped()) {
+          <p class="df-muted mt-1">
+            The approvals that reached the Finance step. A quote the Sales Manager can clear alone
+            never comes to you, and a high-risk one waits with them until they approve it.
+          </p>
+        } @else {
+          <p class="df-muted mt-1">
+            Quotations only land here when their blended risk score requires a human.
+          </p>
+        }
       </div>
       <div class="flex flex-wrap items-center gap-3">
         <df-search-box
@@ -153,7 +162,14 @@ import {
 export class ApprovalListPage implements OnInit {
   protected readonly store = inject(ApprovalStore);
   private readonly router = inject(Router);
+  private readonly session = inject(SessionStore);
   protected readonly empty = EMPTY_STATES['approvals'];
+
+  /**
+   * The API serves Finance only the approvals that reached them, so the queue
+   * explains why it is short instead of looking like something failed to load.
+   */
+  protected readonly financeScoped = computed(() => this.session.role() === Role.FINANCE);
 
   protected readonly columns: ColumnDef<ApprovalDto>[] = [
     {

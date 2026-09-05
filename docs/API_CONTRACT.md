@@ -263,6 +263,18 @@ cannot disagree on day one.
 | POST  | `/quotations/:id/submit`      | REP, MGR, ADMIN | —                          | `SubmitQuotationResponse`   | ✅     |
 | POST  | `/quotations/:id/portal-link` | REP, MGR, ADMIN | `ReissuePortalLinkRequest` | `ReissuePortalLinkResponse` | ✅     |
 
+**Role scoping (read side).** `GET /quotations` and `GET /quotations/board` are
+scoped to what the caller may see before any query filter is applied. Only
+FINANCE is narrowed today: they see `APPROVED`, `NEGOTIATION` and `CONFIRMED`
+only — the deals that cleared approval, confirmed ones included, since those are
+what invoices are raised against. Drafts, quotes still awaiting a Sales Manager,
+and rejected ones are not their queue. A hand-typed `?stage=DRAFT` narrows within
+that scope and returns an empty page rather than widening it, and the board drops
+the lanes the role cannot fill instead of rendering them empty. The stage set is
+`FINANCE_QUOTATION_STAGES` in `packages/shared`; the filters live in
+`apps/api/src/utils/roleScope.ts`. `GET /quotations/:id` is **not** scoped, so a
+link from an invoice or an audit entry still resolves.
+
 `PATCH /quotations/:id` — **must** send the `version` last read.
 
 `POST /quotations/:id/portal-link` (Phase E) — reissue the customer's magic link.
@@ -385,8 +397,17 @@ When risk is 0: `autoApproved: true`, `approval: null`, stage `APPROVED`.
 | POST | `/approvals/:id/reject`             | MGR, FIN             | `{reason}`          | `ApprovalDto`       | 🔨 C   |
 | GET  | `/audit?entity=&entityId=&actorId=` | any                  | —                   | `AuditLogDto[]`     | ✅     |
 
-`GET /approvals?pendingOnly=true` · `?assignedToMe=true` filters to the caller's
-own role queue — which is what Finance wants on login. It also accepts
+**Role scoping (read side).** `GET /approvals` shows FINANCE only the approvals
+that actually *reached* Finance — the Finance step is ACTIVE now, or they already
+decided it. A MEDIUM-risk quote routed to `[SALES_MANAGER]` alone never involves
+them, and a HIGH-risk one still sitting with the Manager has not reached them yet
+(on a HIGH chain the Finance step stays inactive until the Manager approves). A
+step that was SKIPPED by a rejection upstream never landed on their desk either.
+The four `counts` chips are computed over the same scope, so the queue cannot
+read "1 row, 12 Pending". Every other role still sees the whole queue.
+
+`GET /approvals?pendingOnly=true` · `?assignedToMe=true` narrows *within* that
+scope to what is sitting on the caller's desk right now. It also accepts
 `?page=&pageSize=` and returns `{ page, pageSize, total, totalPages }` in `meta`
 (default page size 50) — as do `GET /subscriptions` and `GET /invoices`.
 

@@ -15,6 +15,7 @@ import {
   ApprovalStepStatus,
   AuditEntity,
   KANBAN_STAGES,
+  QUOTATION_WRITE_ROLES,
   QuoteStage,
   Role,
   STAGE_LABEL,
@@ -48,6 +49,7 @@ import {
   nextSeq,
 } from '../../db/models.js';
 import { requireAuth } from '../../middleware/auth.js';
+import { applyStageFilter, quotationScopeFor, visibleStagesFor } from '../../utils/roleScope.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { invalidState, notFound, staleVersion } from '../../utils/apiError.js';
@@ -61,7 +63,7 @@ import { priceLinesForCustomer } from '../pricing/pricing.service.js';
 
 export const quotationsRouter = Router();
 
-const WRITE_ROLES: Role[] = [Role.SALES_REP, Role.SALES_MANAGER, Role.ADMIN];
+const WRITE_ROLES: Role[] = QUOTATION_WRITE_ROLES;
 
 mountModuleHealth(quotationsRouter, {
   module: 'quotations',
@@ -184,13 +186,15 @@ quotationsRouter.get(
   asyncHandler(async (req, res) => {
     const { q } = listParams(req.query);
     const cardsPerColumn = Math.min(100, Math.max(5, Number(req.query.cardsPerColumn ?? 25) || 25));
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { ...quotationScopeFor(req.user?.role) };
     if (req.query.ownerId) filter.ownerId = req.query.ownerId;
     Object.assign(filter, searchFilter(q, QUOTATION_SEARCH_FIELDS) ?? {});
 
     const quotes: any[] = await Quotation.find(filter).sort({ updatedAt: -1 }).lean();
+    // A column this role can never fill is not an empty column, it is not their
+    // column — Finance's board opens on Approved, not on two dead lanes.
     const board: KanbanBoardDto = {
-      columns: KANBAN_STAGES.map((stage) => {
+      columns: visibleStagesFor(req.user?.role, KANBAN_STAGES).map((stage) => {
         const inStage = quotes.filter((qt) => qt.stage === stage);
         const cards = inStage.map(summarise);
         return {
@@ -708,10 +712,12 @@ quotationsRouter.get(
   asyncHandler(async (req, res) => {
     const params = listParams(req.query, { maxPageSize: 500 });
     const filter: Record<string, unknown> = {};
-    for (const field of ['stage', 'ownerId', 'customerId']) {
+    for (const field of ['ownerId', 'customerId']) {
       const value = (req.query as Record<string, unknown>)[field];
       if (value !== undefined && value !== '') filter[field] = value;
     }
+    // `?stage=` narrows what the role may see; it can never widen it.
+    applyStageFilter(filter, (req.query as Record<string, unknown>).stage, req.user?.role);
     Object.assign(filter, searchFilter(params.q, QUOTATION_SEARCH_FIELDS) ?? {});
 
     const [items, total] = await Promise.all([

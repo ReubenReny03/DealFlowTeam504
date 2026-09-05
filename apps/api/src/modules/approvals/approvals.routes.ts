@@ -24,6 +24,7 @@ import { listParams, pageMeta, searchFilter, stableSort } from '../../utils/list
 import { ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
+import { approvalScopeFor } from '../../utils/roleScope.js';
 import { mountModuleHealth } from '../module.health.js';
 
 export const approvalsRouter = Router();
@@ -51,10 +52,13 @@ approvalsRouter.get(
   requireAuth(APPROVER_VIEW),
   asyncHandler(async (req, res) => {
     const params = listParams(req.query);
-    const filter: Record<string, unknown> = {};
+    // Finance's queue is the approvals that reached Finance — not every approval
+    // in the system. `scope` is the floor; the filters below only narrow further.
+    const scope = approvalScopeFor(req.user!.role);
+    const filter: Record<string, unknown> = { ...scope };
     if (req.query.status) filter.status = req.query.status;
     if (req.query.pendingOnly === 'true') filter.status = ApprovalStatus.PENDING;
-    // Finance only ever needs to see what is actually sitting with Finance.
+    // Narrower still: only what is sitting on this role's desk right now.
     if (req.query.assignedToMe === 'true') {
       filter.status = ApprovalStatus.PENDING;
       filter.currentStage = req.user!.role;
@@ -73,10 +77,10 @@ approvalsRouter.get(
         .limit(params.pageSize)
         .lean(),
       Approval.countDocuments(filter),
-      Approval.countDocuments({ status: ApprovalStatus.PENDING }),
-      Approval.countDocuments({ status: ApprovalStatus.RETURNED }),
-      Approval.countDocuments({ status: ApprovalStatus.APPROVED }),
-      Approval.countDocuments({ status: ApprovalStatus.REJECTED }),
+      Approval.countDocuments({ ...scope, status: ApprovalStatus.PENDING }),
+      Approval.countDocuments({ ...scope, status: ApprovalStatus.RETURNED }),
+      Approval.countDocuments({ ...scope, status: ApprovalStatus.APPROVED }),
+      Approval.countDocuments({ ...scope, status: ApprovalStatus.REJECTED }),
     ]);
 
     const payload: ApprovalListDto = {

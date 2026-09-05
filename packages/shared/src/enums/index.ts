@@ -16,6 +16,12 @@ export type Role = (typeof Role)[keyof typeof Role];
 export const ALL_ROLES = Object.values(Role) as Role[];
 /** Roles that may act as an approver in an approval chain. */
 export const APPROVER_ROLES: Role[] = [Role.SALES_MANAGER, Role.FINANCE];
+/**
+ * Roles that may create or edit a quotation. Finance is deliberately absent —
+ * they review and bill deals, they do not raise them (docs/USER_FLOWS.md) — so
+ * the UI hides the actions rather than offering a button that always 403s.
+ */
+export const QUOTATION_WRITE_ROLES: Role[] = [Role.SALES_REP, Role.SALES_MANAGER, Role.ADMIN];
 /** Roles that use the internal shell (everything except the portal). */
 export const INTERNAL_ROLES: Role[] = [Role.ADMIN, Role.SALES_REP, Role.SALES_MANAGER, Role.FINANCE];
 

@@ -27,6 +27,23 @@ export const APP_TAGLINE = 'An intelligent, self-governing sales operations plat
  */
 export const APPROVAL_SLA_HOURS = 24;
 
+/**
+ * The quotation stages Finance may see on screen 3.
+ *
+ * Finance works the second half of a deal — margin on what cleared approval, and
+ * the billing that follows — so drafts, quotes still awaiting a Sales Manager and
+ * rejected ones are not their queue. CONFIRMED stays in on purpose: a deal the
+ * customer accepted is exactly what an invoice is raised against.
+ *
+ * The API enforces this (see `utils/roleScope.ts`); the constant is shared so the
+ * UI describes the same rule it is being served.
+ */
+export const FINANCE_QUOTATION_STAGES: QuoteStage[] = [
+  QuoteStage.APPROVED,
+  QuoteStage.NEGOTIATION,
+  QuoteStage.CONFIRMED,
+];
+
 export const STAGE_LABEL: Record<QuoteStage, string> = {
   DRAFT: 'Draft',
   PENDING_APPROVAL: 'Pending Approval',

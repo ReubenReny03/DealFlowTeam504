@@ -1,12 +1,14 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import {
-  EMPTY_STATES, TIER_LABEL, type CustomerDto, type KanbanBoardDto, type QuotationDto, type QuotationSummaryDto,
+  EMPTY_STATES, QUOTATION_WRITE_ROLES, Role, TIER_LABEL,
+  type CustomerDto, type KanbanBoardDto, type QuotationDto, type QuotationSummaryDto,
 } from '@dealflow/shared';
 import { ApiService } from '../../core/api/api.service';
 import { ListQuery } from '../../core/state/list-query';
+import { SessionStore } from '../../core/state/session.store';
 import { ToastStore } from '../../core/state/toast.store';
 import {
   AgoPipe, ColumnDef, DataTableComponent, EmptyStateComponent, ErrorStateComponent,
@@ -50,7 +52,14 @@ function toSummary(q: QuotationDto): QuotationSummaryDto {
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="df-h1">Quotations</h1>
-        <p class="df-muted mt-1">Every open deal, grouped by where it is in the flow.</p>
+        @if (financeScoped()) {
+          <p class="df-muted mt-1">
+            The deals that cleared approval — approved, in negotiation, or confirmed. Drafts and
+            quotes still awaiting a Sales Manager are not yours to work.
+          </p>
+        } @else {
+          <p class="df-muted mt-1">Every open deal, grouped by where it is in the flow.</p>
+        }
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <!-- One term, both views: the board and the table take the same ?q=. -->
@@ -63,7 +72,9 @@ function toSummary(q: QuotationDto): QuotationSummaryDto {
         <button type="button" class="df-btn-ghost" (click)="toggleView()">
           {{ view() === 'kanban' ? 'Switch to Table View' : 'Switch to Kanban View' }}
         </button>
-        <button type="button" class="df-btn-primary" (click)="create()">+ New Quotation</button>
+        @if (canCreate()) {
+          <button type="button" class="df-btn-primary" (click)="create()">+ New Quotation</button>
+        }
       </div>
     </div>
 
@@ -76,7 +87,7 @@ function toSummary(q: QuotationDto): QuotationSummaryDto {
         <df-empty-state
           [title]="empty.title"
           [body]="empty.body"
-          [cta]="empty.cta ?? null"
+          [cta]="canCreate() ? (empty.cta ?? null) : null"
           [filtered]="query.isFiltered()"
           [searchTerm]="query.q()"
           (action)="create()"
@@ -138,7 +149,19 @@ function toSummary(q: QuotationDto): QuotationSummaryDto {
 export class QuotationListPage implements OnInit {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  private readonly session = inject(SessionStore);
   private readonly toast = inject(ToastStore);
+
+  /**
+   * Finance is served a narrower list by the API, so the page says so rather than
+   * claiming to show "every open deal" while showing a subset of them.
+   */
+  protected readonly financeScoped = computed(() => this.session.role() === Role.FINANCE);
+  /** No "+ New Quotation" for a role the API would 403 — Finance reviews, never raises. */
+  protected readonly canCreate = computed(() => {
+    const role = this.session.role();
+    return !!role && QUOTATION_WRITE_ROLES.includes(role);
+  });
 
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);

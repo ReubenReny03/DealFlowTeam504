@@ -94,14 +94,19 @@ chain on screen 18.
 **Cares about:** margin on the deals that reach the second approval step, and
 keeping billing reconciled with what actually shipped.
 
-**Can see:** approvals (usually filtered to the Finance queue), fulfillment,
-subscriptions and billing detail, invoices, reporting.
+**Can see:** approvals **that reached the Finance step** — the queue is scoped by
+the API, not merely defaulted to a filter, so a quote the Sales Manager clears
+alone never appears; quotations **from APPROVED onward** (approved, in
+negotiation, confirmed), never drafts or rejects; fulfillment, subscriptions and
+billing detail, invoices, reporting.
 
 **Can do:** approve/return/reject at the Finance step, record payments, modify
 and cancel subscriptions (which triggers proration and credit notes), accept or
 override a warehouse split.
 
-**Blocked from:** creating quotations, and the customer portal.
+**Blocked from:** creating quotations — screen 3 hides **+ New Quotation** for
+Finance rather than offering a button the API would refuse — and the customer
+portal.
 
 **Note:** Finance only ever sees a quotation *after* a Sales Manager has approved
 it. On a HIGH-risk quote the Finance step stays inactive until then.

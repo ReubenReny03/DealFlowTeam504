@@ -906,6 +906,100 @@ async function main(): Promise<void> {
     },
   );
 
+  /* ---- 18. Finance's lists are scoped to Finance's work ---- */
+  await step(
+    18,
+    "Finance sees only approved-onward quotations and only the approvals that reached Finance",
+    'C',
+    async () => {
+      const finance = tokens[Role.FINANCE];
+      const manager = tokens[Role.SALES_MANAGER];
+
+      // Approvals: a MEDIUM-risk quote routed to the Manager alone is not Finance's
+      // business, and a HIGH-risk one still sitting with the Manager has not reached
+      // them yet. Both are visible to the Manager, so the queue really is scoped.
+      const financeQueue = await api('GET', '/approvals?pageSize=100', { token: finance });
+      const managerQueue = await api('GET', '/approvals?pageSize=100', { token: manager });
+      assert(financeQueue.status === 200 && managerQueue.status === 200, 'approval queues failed');
+      assert(
+        managerQueue.body.data.items.length > financeQueue.body.data.items.length,
+        `Finance should see fewer approvals than the Manager, got ${financeQueue.body.data.items.length} vs ${managerQueue.body.data.items.length}`,
+      );
+      assert(
+        financeQueue.body.data.items.length > 0,
+        'Finance must still see the approvals that did reach them',
+      );
+      for (const a of financeQueue.body.data.items) {
+        const financeStep = a.steps.find((st: any) => st.role === Role.FINANCE);
+        assert(financeStep, `${a.quotationNumber} has no Finance step but is in Finance's queue`);
+        assert(
+          financeStep.status !== 'PENDING' && financeStep.status !== 'SKIPPED',
+          `${a.quotationNumber}'s Finance step never activated, so it never reached Finance`,
+        );
+      }
+      // The chips must count the same scope as the rows, or the queue reads as
+      // broken — "1 row, 12 Pending". Checked against Finance's own rows, since
+      // the page holds all of them. (An auto-approved NOT_REQUIRED approval is in
+      // no chip by design; the four chips cover the four decided states.)
+      const counts = financeQueue.body.data.counts;
+      const managerCounts = managerQueue.body.data.counts;
+      for (const [chip, status] of [
+        ['pending', 'PENDING'],
+        ['returned', 'RETURNED'],
+        ['approved', 'APPROVED'],
+        ['rejected', 'REJECTED'],
+      ] as const) {
+        const mine = financeQueue.body.data.items.filter((a: any) => a.status === status).length;
+        assert(
+          counts[chip] === mine,
+          `the ${chip} chip says ${counts[chip]} but Finance can see ${mine} such approvals`,
+        );
+        assert(
+          counts[chip] <= managerCounts[chip],
+          `Finance's ${chip} chip (${counts[chip]}) must never exceed the Manager's (${managerCounts[chip]})`,
+        );
+      }
+      assert(
+        counts.approved < managerCounts.approved,
+        "the Manager's history of approvals must not be counted into Finance's chips",
+      );
+
+      // Quotations: approved onward only. Drafts and rejects are not Finance's queue.
+      const financeQuotes = await api('GET', '/quotations?pageSize=500', { token: finance });
+      assert(financeQuotes.status === 200, 'finance quotation list failed');
+      assert(financeQuotes.body.data.length > 0, 'Finance must still see the cleared deals');
+      assert(
+        financeQuotes.body.data.every((qt: any) =>
+          ['APPROVED', 'NEGOTIATION', 'CONFIRMED'].includes(qt.stage),
+        ),
+        'Finance must not see a draft, a pending or a rejected quotation',
+      );
+      const managerQuotes = await api('GET', '/quotations?pageSize=500', { token: manager });
+      assert(
+        managerQuotes.body.meta.total > financeQuotes.body.meta.total,
+        'the Manager still sees the whole pipeline',
+      );
+
+      // A hand-typed stage a role cannot see narrows to nothing; it never widens.
+      const smuggled = await api('GET', '/quotations?stage=DRAFT', { token: finance });
+      assert(
+        smuggled.status === 200 && smuggled.body.data.length === 0,
+        `?stage=DRAFT must return nothing for Finance, got ${smuggled.body.data.length} rows`,
+      );
+
+      // And the board drops the lanes Finance can never fill.
+      const board = await api('GET', '/quotations/board', { token: finance });
+      const boardStages = board.body.data.columns.map((c: any) => c.stage);
+      assert(
+        !boardStages.includes('DRAFT') && !boardStages.includes('PENDING_APPROVAL'),
+        `Finance's board must not carry lanes they cannot see: ${boardStages.join(', ')}`,
+      );
+      assert(boardStages.includes('APPROVED'), "Finance's board must keep the Approved lane");
+
+      return `approvals ${financeQueue.body.data.items.length} of ${managerQueue.body.data.items.length} · quotations ${financeQuotes.body.meta.total} of ${managerQuotes.body.meta.total} · board lanes ${boardStages.join('/')}`;
+    },
+  );
+
   /* ------------------------------------------------------------------ report */
 
   server.close();
