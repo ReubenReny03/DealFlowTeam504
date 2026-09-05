@@ -1,0 +1,5 @@
+#!/bin/sh
+# The merge gate, run locally before every commit.
+# Skip deliberately with `git commit --no-verify` only when you know why.
+echo "→ npm run verify (build · typecheck · lint · test · reset · smoke)"
+npm run verify

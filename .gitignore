@@ -1,9 +1,17 @@
-frontend/node_modules/
-frontend/dist/
-frontend/.angular/
-backend/node_modules/
-backend/dist/
-backend/.env
-.DS_Store
+node_modules/
+dist/
+.angular/
+coverage/
 *.log
-.vscode/
+.env
+.env.local
+.DS_Store
+apps/web/.angular/
+apps/api/dist/
+packages/shared/dist/
+storage/exports/
+storage/uploads/
+storage/logs/
+
+# one-off local helper, not part of the project
+script.txt

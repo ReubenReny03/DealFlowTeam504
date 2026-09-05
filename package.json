@@ -1,0 +1,52 @@
+{
+  "name": "dealflow360",
+  "private": true,
+  "version": "1.0.0",
+  "description": "DealFlow360 — intelligent, self-governing B2B sales operations platform",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:shared": "npm run build -w @dealflow/shared",
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm run dev -w @dealflow/api",
+    "dev:web": "npm run start -w @dealflow/web",
+    "mongo:up": "docker compose up -d mongo",
+    "mongo:down": "docker compose down",
+    "seed": "tsx apps/api/src/seed/seed.ts",
+    "reset": "tsx scripts/reset-env.ts",
+    "reset:check": "tsx scripts/reset-env.ts --check-only",
+    "demo:reset": "tsx scripts/reset-env.ts --verify",
+    "smoke": "tsx apps/api/src/tests/e2e-smoke.ts",
+    "test": "npm run test -w @dealflow/shared",
+    "typecheck": "npm run typecheck -w @dealflow/shared && npm run typecheck -w @dealflow/api && npm run typecheck -w @dealflow/web",
+    "lint": "eslint . --ext .ts --max-warnings=0",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "format": "prettier --write \"**/*.{ts,html,css,json,md}\"",
+    "verify": "npm run build:shared && npm run typecheck && npm run lint && npm run test && npm run reset && npm run smoke",
+    "docs:credentials": "tsx scripts/gen-credentials-doc.ts",
+    "prepare": "husky || true"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "concurrently": "^9.1.0",
+    "eslint": "^8.57.1",
+    "husky": "^9.1.7",
+    "mongodb-memory-server": "^10.4.3",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "~5.4.5"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "esbuild@0.21.5": true,
+    "esbuild@0.20.1": true,
+    "nice-napi@1.0.2": true,
+    "mongodb-memory-server@10.4.3": true
+  }
+}
