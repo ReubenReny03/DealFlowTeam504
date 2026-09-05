@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "noEmit": true,
+    "baseUrl": ".",
+    // @dealflow/shared resolves through node_modules to packages/shared/dist,
+    // so run `npm run build:shared` (the dev/verify scripts already do) first.
+    "paths": {}
+  },
+  "include": ["src/**/*.ts"]
+}
