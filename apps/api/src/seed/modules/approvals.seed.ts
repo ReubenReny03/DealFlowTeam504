@@ -1,6 +1,6 @@
 /**
- * Live approvals (screens 5 and 6), the audit trail, Priya's portal token and
- * the negotiation history on Q-1030.
+ * Live approvals (screens 5 and 6), the audit trail, the customer portal tokens
+ * and the negotiation history on Q-1030 and Q-1029.
  *
  * The risk snapshot on each approval is copied from the quotation the previous
  * seed module computed — it is never re-typed by hand.
@@ -23,9 +23,16 @@ import { env } from '../../config/env.js';
 /** Deterministic magic-link token for Priya against Q-1042. Printed by every seed run. */
 export const PRIYA_PORTAL_TOKEN = 'demo-acme-q1042-2f7a91c4b8e04d16';
 
+/**
+ * R. Das's link against Beta's Q-1038. It exists to make the two portal modes
+ * visibly different: this link opens ONE quotation, while signing in as R. Das
+ * shows all four Beta has been sent.
+ */
+export const DAS_PORTAL_TOKEN = 'demo-beta-q1038-6c31d0af59b74e28';
+
 export async function seedApprovalsAndAudit(ctx: SeedContext): Promise<void> {
   const quotes = await Quotation.find({
-    number: { $in: ['Q-1042', 'Q-1039', 'Q-1035', 'Q-1045', 'Q-1046'] },
+    number: { $in: ['Q-1042', 'Q-1039', 'Q-1035', 'Q-1045', 'Q-1046', 'Q-1038'] },
   }).lean();
   const byNumber = Object.fromEntries(quotes.map((q: any) => [q.number, q]));
 
@@ -34,6 +41,7 @@ export async function seedApprovalsAndAudit(ctx: SeedContext): Promise<void> {
   const q1035 = byNumber['Q-1035'];
   const q1045 = byNumber['Q-1045'];
   const q1046 = byNumber['Q-1046'];
+  const q1038 = byNumber['Q-1038'];
 
   const submittedAt = ctx.daysAgo(3);
   const returnedAt = ctx.daysAgo(2);
@@ -186,7 +194,28 @@ export async function seedApprovalsAndAudit(ctx: SeedContext): Promise<void> {
       expiresAt: ctx.daysAgo(1),
       revoked: false,
     },
+    {
+      // R. Das's link. A link is scoped to ONE quotation even though Beta has
+      // four — signing in with his password is what opens the whole list.
+      _id: fid(G.PORTAL, 3),
+      token: DAS_PORTAL_TOKEN,
+      quotationId: q1038._id,
+      customerId: IDS.customers.beta,
+      userId: IDS.users.das,
+      expiresAt: addDays(ctx.now, env.portalTokenTtlDays),
+      revoked: false,
+    },
   ]);
+
+  /* ---- Q-1029 is mid-negotiation with Beta, so R. Das's list shows a live
+         conversation next to a finished order and one still in approval. ---- */
+  const q1029: any = await Quotation.findOne({ number: 'Q-1029' }).lean();
+  if (q1029) {
+    await NegotiationEvent.insertMany([
+      { _id: fid(G.NEGOTIATION, 3), quotationId: q1029._id, lineId: q1029.lines[0].lineId, lineName: 'Docking Station', type: NegotiationEventType.COMMENT, authorId: IDS.users.das, authorName: 'R. Das', fromCustomer: true, comment: 'We may take 20 of these instead of 12 — does the discount move?', createdAt: ctx.daysAgo(2), updatedAt: ctx.daysAgo(2) },
+      { _id: fid(G.NEGOTIATION, 4), quotationId: q1029._id, lineId: q1029.lines[0].lineId, lineName: 'Docking Station', type: NegotiationEventType.COMMENT, authorId: IDS.users.nair, authorName: 'S. Nair', fromCustomer: false, comment: 'It can, at 20 units. Send the counter through and I will re-price it.', createdAt: ctx.daysAgo(1), updatedAt: ctx.daysAgo(1) },
+    ]);
+  }
 
   /* ---- Q-1030 is mid-negotiation with Zenith Co, and has been for 9 days. ---- */
   const q1030: any = await Quotation.findOne({ number: 'Q-1030' }).lean();

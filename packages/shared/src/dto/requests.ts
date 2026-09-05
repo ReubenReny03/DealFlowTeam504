@@ -320,6 +320,37 @@ export interface MarkAllReadResponse {
 
 /* ------------------------------------------------------------------ portal & negotiation */
 
+/** One row of the customer's quotation list in the portal (screen 11a). */
+export interface PortalQuotationSummaryDto {
+  id: Id;
+  number: string;
+  stage: QuoteStage;
+  currency: Currency;
+  grandTotal: Money;
+  lineCount: number;
+  createdAt: IsoDate;
+  lastActivityAt: IsoDate;
+  validUntil?: IsoDate;
+  promisedDeliveryDate?: IsoDate;
+  /** True when the customer can confirm this one right now. */
+  canConfirm: boolean;
+  /** True when it is sitting in the internal approval chain. */
+  awaitingApproval: boolean;
+  /** How many negotiation messages exist on this quotation. */
+  messageCount: number;
+}
+
+/**
+ * `GET /portal/quotations` — every quotation this company has been sent.
+ * A password login sees the whole list; a magic link still unlocks exactly the
+ * one quotation it was minted for, so a link session gets a list of one.
+ */
+export interface PortalQuotationListResponse {
+  customer: CustomerDto;
+  items: PortalQuotationSummaryDto[];
+  scopedToSingleQuotation: boolean;
+}
+
 export interface PortalResolveResponse {
   quotation: QuotationDto;
   customer: CustomerDto;
@@ -327,6 +358,8 @@ export interface PortalResolveResponse {
   canConfirm: boolean;
   /** Banner text explaining that a counter above threshold re-enters approval. */
   negotiationNotice: string;
+  /** How many quotations this company has in the portal, this one included. */
+  siblingCount: number;
 }
 
 export interface PortalCommentRequest {

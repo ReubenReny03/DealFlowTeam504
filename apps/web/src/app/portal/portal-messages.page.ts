@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { ErrorStateComponent, LoadingComponent, ShortDatePipe } from '../shared/ui';
 import { PortalStore } from './portal.store';
 
@@ -6,13 +7,27 @@ import { PortalStore } from './portal.store';
 @Component({
   selector: 'df-portal-messages',
   standalone: true,
-  imports: [ShortDatePipe, LoadingComponent, ErrorStateComponent],
+  imports: [RouterLink, ShortDatePipe, LoadingComponent, ErrorStateComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 class="df-h1">Messages</h1>
     <p class="df-muted mt-1">
-      Everything you and your account manager have said about this quotation.
+      @if (store.quotation(); as q) {
+        Everything you and your account manager have said about
+        <span class="font-mono text-slate-600">{{ q.number }}</span>.
+      } @else {
+        Everything you and your account manager have said about this quotation.
+      }
     </p>
+    @if (store.hasMultiple()) {
+      <p class="mt-2 text-sm text-slate-500">
+        Messages are per quotation —
+        <a routerLink="/portal/quotations" class="font-medium text-slate-700 underline underline-offset-2">
+          pick another quotation
+        </a>
+        to read its conversation.
+      </p>
+    }
 
     @if (store.loading()) {
       <div class="mt-6"><df-loading [count]="3" label="Loading messages" /></div>
@@ -67,6 +82,7 @@ export class PortalMessagesPage implements OnInit {
   protected readonly store = inject(PortalStore);
   ngOnInit(): void {
     if (!this.store.data()) void this.store.load();
+    void this.store.loadList();
   }
   reload(): void {
     void this.store.load();

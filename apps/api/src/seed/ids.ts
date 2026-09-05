@@ -83,6 +83,10 @@ export const IDS = {
     q1042: fid(G.QUOTATION, 1042),
     q1041: fid(G.QUOTATION, 1041),
     q1039: fid(G.QUOTATION, 1039),
+    /* Beta Industries' back catalogue — one company, several quotations. */
+    q1038: fid(G.QUOTATION, 1038),
+    q1033: fid(G.QUOTATION, 1033),
+    q1029: fid(G.QUOTATION, 1029),
     q1035: fid(G.QUOTATION, 1035),
     q1030: fid(G.QUOTATION, 1030),
     q1044: fid(G.QUOTATION, 1044),

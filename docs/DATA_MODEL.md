@@ -284,6 +284,14 @@ Indexes: `{entity, entityId, timestamp: -1}` · `{timestamp: -1}` ·
 
 `{token (unique), quotationId, customerId, userId, expiresAt, revoked, lastUsedAt}`
 
+A **customer** has many quotations — `Quotation.customerId` is a plain
+many-to-one reference, indexed `{customerId, createdAt: -1}` — and the portal's
+quotation list (`GET /portal/quotations`) is built on exactly that. Every seeded
+company carries several: Acme has Q-1042 and Q-1041, Beta has Q-1039, Q-1038,
+Q-1033 and Q-1029, Zenith and Orion two each, plus their share of the reporting
+history. A portal **token**, by contrast, is narrower than the company it
+belongs to:
+
 A token unlocks **exactly one** quotation for **exactly one** customer. That
 scope is checked server-side on every request, so guessing a URL fails the same
 way as reusing someone else's link.
@@ -408,7 +416,7 @@ After `npm run reset`:
 | Stock | 8 | | Invoice | 3 |
 | SubscriptionPlan | 4 | | DealAlert | 8 (5 stalled / 2 anomalies / 1 slippage) |
 | ProductPairing | 7 | | AuditLog | 10 |
-| ApprovalChainConfig | 1 | | PortalToken | 2 (one live, one expired) |
+| ApprovalChainConfig | 1 | | PortalToken | 3 (two live, one expired) |
 
 Enough that all 18 screens are non-empty on first run, and small enough that a
 full reset finishes in seconds.

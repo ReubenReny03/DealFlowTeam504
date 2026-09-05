@@ -109,6 +109,7 @@ preview cannot disagree with what the server stores.
 | `/admin/products` · `/:id` | `roleGuard([ADMIN, SALES_MANAGER])` | Admin | 16, 17 |
 | `/admin/config` | `roleGuard([ADMIN, SALES_MANAGER])` | Admin | 18 |
 | `/admin/pricelists` · `/warehouses` · `/plans` | `roleGuard([ADMIN, SALES_MANAGER])` | Admin | — |
+| `/portal/quotations` (the company's list, and where `/portal` lands) | **`portalGuard`** | **Portal** | 11 |
 | `/portal/quotation` · `/portal/q/:number` | **`portalGuard`** | **Portal** | 11 |
 | `/portal/messages` · `/portal/profile` | **`portalGuard`** | **Portal** | 11 |
 

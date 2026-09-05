@@ -111,8 +111,10 @@ Per-module status, including what is still to build and who owns it:
 }
 ```
 
-A customer login also carries `portalQuotationId`, so the portal can open their
-live quotation straight away.
+A customer login also carries `portalQuotationId`, so the portal can open a live
+quotation straight away: the quotation their most recent unrevoked magic link
+points at, or — with no live link — their company's most recently active
+non-draft quotation. The full list is one call away at `GET /portal/quotations`.
 
 `GET /auth/demo-accounts` returns `[]` unless `SHOW_DEMO_LOGINS=true`.
 Errors: `401 UNAUTHENTICATED` on a bad pair — identical message either way, so
@@ -346,13 +348,46 @@ if the approval is already decided.
 
 **A separate surface with a separate credential.** An internal JWT is refused.
 
-| M    | Path                         | Auth                     | Request                | Response                | Status |
-| ---- | ---------------------------- | ------------------------ | ---------------------- | ----------------------- | ------ |
+| M    | Path                         | Auth                     | Request                | Response                     | Status |
+| ---- | ---------------------------- | ------------------------ | ---------------------- | ---------------------------- | ------ |
+| GET  | `/portal/quotations`         | portal token or CUSTOMER | —                      | `PortalQuotationListResponse` | ✅     |
 | GET  | `/portal/q/:number`          | portal token or CUSTOMER | —                      | `PortalResolveResponse` | ✅     |
 | GET  | `/portal/q/:number/messages` | portal token or CUSTOMER | —                      | `NegotiationEventDto[]` | ✅     |
 | POST | `/portal/q/:number/comment`  | portal token or CUSTOMER | `PortalCommentRequest` | `NegotiationEventDto`   | 🔨 C   |
 | POST | `/portal/q/:number/counter`  | portal token or CUSTOMER | `PortalCounterRequest` | `PortalCounterResponse` | 🔨 C   |
 | POST | `/portal/q/:number/confirm`  | portal token or CUSTOMER | —                      | `PortalConfirmResponse` | 🔨 C   |
+
+`GET /portal/quotations` — **one customer, many quotations.**
+
+`Quotation.customerId` is a plain many-to-one reference, so a company accumulates
+quotations over its lifetime. This endpoint returns every one of them that has
+left `DRAFT` — the same set `/portal/q/:number` will open — newest activity first,
+with the company on the side:
+
+```json
+{
+  "customer": { "id": "…", "name": "Beta Industries", "tier": "SILVER", "…": "…" },
+  "items": [
+    {
+      "id": "…", "number": "Q-1029", "stage": "NEGOTIATION", "currency": "USD",
+      "grandTotal": 412300, "lineCount": 2, "canConfirm": true,
+      "awaitingApproval": false, "messageCount": 2,
+      "createdAt": "…", "lastActivityAt": "…", "validUntil": "…"
+    }
+  ],
+  "scopedToSingleQuotation": false
+}
+```
+
+The two credentials differ here, and deliberately:
+
+- a **password login** is scoped to the company, so it lists everything
+  (`scopedToSingleQuotation: false`);
+- a **magic link** is still scoped to the single quotation it was minted for, so
+  it lists exactly that one (`scopedToSingleQuotation: true`).
+
+`PortalResolveResponse` carries `siblingCount` for the same reason — the detail
+screen knows whether to offer the switcher without a second round-trip.
 
 `POST /portal/q/Q-1042/counter` — **the re-approval loop.**
 

@@ -129,32 +129,43 @@ useful for support, and for the demo.)
 
 ### Priya Menon — Customer at Acme Corp
 `priya@acmecorp.test` / `Demo@123`, **or** the magic link
-→ lands on **My Quotation**
+→ lands on **My Quotations**
 
 **Cares about:** getting a straight answer on price without a chain of emails,
 and being able to ask about one line without renegotiating the whole order.
 
-**Can see:** exactly one thing — Acme Corp's quotations. Line items, quantities,
-her prices, her discounts, the total, and the message history.
+**Can see:** exactly one thing — Acme Corp's quotations, all of them. The list
+opens first; picking one shows its line items, quantities, her prices, her
+discounts, the total, and that quotation's own message history.
 
 **Can do:** comment on any line, propose a counter discount, request a different
 delivery date, and confirm.
 
 **Blocked from:** absolutely everything else. She cannot see margin, cost, the
 risk score, who is approving, other customers, or any internal screen. Her
-navigation has three items: **My Quotation · Messages · Profile**.
+navigation has three items: **My Quotations · Messages · Profile**.
+
+**The two credentials are scoped differently, on purpose.** Her password login
+is scoped to *Acme Corp*, so it lists every quotation the company has been sent.
+A magic link is scoped to the *one quotation it was minted for*, so the same list
+shows a single row and says why.
 
 **Screens:** 1, 11
 
 ---
 
 ### R. Das — Customer at Beta Industries
-`das@betaindustries.test` / `Demo@123` → lands on **My Quotation**
+`das@betaindustries.test` / `Demo@123` → lands on **My Quotations**
 
 **Exists to prove the boundary is real.** He is a legitimate, fully working
 portal user for a *different* company. Sign in as him and try to open Acme's
 quotation — by URL, or by pasting Priya's link — and both return
 **403: "This quotation belongs to a different company."**
+
+He is also the clearest demonstration that a customer is not a quotation: Beta
+Industries has several, and his list shows all of them — one in negotiation, one
+approved and waiting on him, one confirmed, one still inside internal approval —
+with Acme's nowhere in sight.
 
 **Screens:** 1, 11
 

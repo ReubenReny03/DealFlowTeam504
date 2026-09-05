@@ -43,7 +43,9 @@ panel. No typing.
 | Customer — Acme Corp | Priya Menon | `priya@acmecorp.test` | `Demo@123` | `CUSTOMER` | /portal |
 | Customer — Beta Industries | R. Das | `das@betaindustries.test` | `Demo@123` | `CUSTOMER` | /portal |
 
-**Customer portal, ready to click:** http://localhost:4200/portal/q/Q-1042?token=demo-acme-q1042-2f7a91c4b8e04d16
+**Customer portal, ready to click:** http://localhost:4200/portal/q/Q-1042?token=demo-acme-q1042-2f7a91c4b8e04d16 (Acme Corp / Priya)
+
+**And a second company:** http://localhost:4200/portal/q/Q-1038?token=demo-beta-q1038-6c31d0af59b74e28 (Beta Industries / R. Das)
 
 <!-- END GENERATED CREDENTIALS -->
 

@@ -34,6 +34,10 @@ import { PortalStore } from './portal.store';
           }}</span>
         </div>
         <div class="flex justify-between px-4 py-3">
+          <span class="text-sm text-slate-500">Quotations</span>
+          <span class="text-sm font-medium text-slate-800">{{ store.list().length || '—' }}</span>
+        </div>
+        <div class="flex justify-between px-4 py-3">
           <span class="text-sm text-slate-500">Access</span>
           <span class="text-sm text-slate-600"
             >This account can only open quotations belonging to your company.</span
@@ -48,6 +52,7 @@ export class PortalProfilePage implements OnInit {
   protected readonly store = inject(PortalStore);
   ngOnInit(): void {
     if (!this.store.data()) void this.store.load();
+    void this.store.loadList();
   }
   reload(): void {
     void this.store.load();

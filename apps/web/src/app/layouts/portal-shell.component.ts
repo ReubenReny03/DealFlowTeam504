@@ -5,7 +5,7 @@ import { SessionStore } from '../core/state/session.store';
 /**
  * The customer portal shell — a deliberately different surface.
  * Three items, no internal navigation, no way back into the workspace. A
- * customer signed in here can reach nothing but their own quotation.
+ * customer signed in here can reach their own company's quotations and nothing else.
  */
 @Component({
   selector: 'df-portal-shell',
@@ -19,7 +19,7 @@ import { SessionStore } from '../core/state/session.store';
           <div class="flex items-center gap-2.5">
             <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 text-sm font-bold text-white">DF</span>
             <div class="leading-tight">
-              <p class="text-sm font-semibold text-slate-900">Your quotation</p>
+              <p class="text-sm font-semibold text-slate-900">Your quotations</p>
               <p class="text-xs text-slate-500">Shared with you by your account manager</p>
             </div>
           </div>
@@ -51,7 +51,7 @@ import { SessionStore } from '../core/state/session.store';
 export class PortalShellComponent {
   protected readonly session = inject(SessionStore);
   protected readonly nav = [
-    { label: 'My Quotation', route: '/portal/quotation' },
+    { label: 'My Quotations', route: '/portal/quotations' },
     { label: 'Messages', route: '/portal/messages' },
     { label: 'Profile', route: '/portal/profile' },
   ];

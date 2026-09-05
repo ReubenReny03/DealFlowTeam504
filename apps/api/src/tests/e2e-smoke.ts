@@ -357,7 +357,57 @@ async function main(): Promise<void> {
       expired.status === 403 && expired.body.error?.code === 'PORTAL_TOKEN_EXPIRED',
       `an expired link should return PORTAL_TOKEN_EXPIRED, got ${expired.body.error?.code}`,
     );
-    return 'Priya 200 · R. Das 403 · internal JWT 403 · expired link PORTAL_TOKEN_EXPIRED';
+
+    /* ---- one customer, many quotations ---- */
+
+    // Signed in with his password, R. Das sees every quotation Beta has been
+    // sent — and nothing belonging to anyone else.
+    const dasList = await api('GET', '/portal/quotations', {
+      token: tokens['das@betaindustries.test'],
+    });
+    expectBuilt(dasList, 'C', 'GET /portal/quotations');
+    assert(dasList.status === 200, `R. Das could not list his quotations: ${dasList.body.error?.message}`);
+    const dasItems = dasList.body.data.items as { number: string; stage: string }[];
+    assert(dasItems.length > 1, `expected Beta to have several quotations, got ${dasItems.length}`);
+    assert(
+      dasList.body.data.customer.name === 'Beta Industries',
+      `list resolved the wrong company: ${dasList.body.data.customer.name}`,
+    );
+    assert(
+      !dasItems.some((q) => q.number === 'Q-1042'),
+      "R. Das's list must never contain Acme Corp's quotation",
+    );
+    assert(
+      !dasItems.some((q) => q.stage === 'DRAFT'),
+      'a draft has not been sent to the customer and must not appear in the portal',
+    );
+    assert(
+      dasList.body.data.scopedToSingleQuotation === false,
+      'a password login is scoped to the company, not to one quotation',
+    );
+
+    // ...and he can open any one of them, not just whichever was linked last.
+    const dasOther = await api('GET', `/portal/q/${dasItems[0].number}`, {
+      token: tokens['das@betaindustries.test'],
+    });
+    assert(
+      dasOther.status === 200,
+      `R. Das could not open his own ${dasItems[0].number}: ${dasOther.body.error?.message}`,
+    );
+
+    // A magic link, by contrast, still unlocks exactly the one it was minted for.
+    const linkList = await api('GET', '/portal/quotations', { portalToken: PRIYA_PORTAL_TOKEN });
+    expectBuilt(linkList, 'C', 'GET /portal/quotations');
+    assert(
+      linkList.body.data.items.length === 1 && linkList.body.data.items[0].number === 'Q-1042',
+      'a magic link must list exactly the quotation it was minted for',
+    );
+    assert(
+      linkList.body.data.scopedToSingleQuotation === true,
+      'a magic-link session must report itself as scoped to one quotation',
+    );
+
+    return `Priya 200 · R. Das 403 on Acme · internal JWT 403 · expired link PORTAL_TOKEN_EXPIRED · R. Das lists ${dasItems.length} of his own · magic link lists 1`;
   });
 
   /* ---- 8. Counter-offer re-enters approval automatically ---- */

@@ -34,8 +34,11 @@ const REPS = [
 
 const PRODUCTS = [P.laptop, P.dock, P.mouse, P.warranty, P.setup];
 
-/** Quotes already created in the named seeds; the history tops the month up to 146. */
-const HISTORY_COUNT = 136;
+/**
+ * Quotes already created in the named seeds; the history tops the month up to 146.
+ * Kept in step with the named set (13 quotations) so the seeded volume stays 149.
+ */
+const HISTORY_COUNT = 133;
 /** Approval cycle times in hours. Mean is 6.4 -> screen 15's "Avg Approval Time". */
 const CYCLE_HOURS = [2.1, 3.5, 4.0, 5.2, 6.0, 6.4, 7.1, 8.3, 9.0, 10.2, 11.0, 4.0];
 

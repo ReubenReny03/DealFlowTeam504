@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnChanges, OnInit, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { CATEGORY_LABEL } from '@dealflow/shared';
 import { ToastStore } from '../core/state/toast.store';
 import { LoadingComponent, MoneyPipe, ShortDatePipe, StatusChipComponent } from '../shared/ui';
@@ -11,11 +12,14 @@ import { PortalStore } from './portal.store';
  * A genuinely separate surface: its own shell, its own guard, its own token, and
  * no route into the internal app. What the customer can do here is exactly three
  * things — ask about a line, counter the terms, or confirm.
+ *
+ * One of possibly many: the company's other quotations sit one tap away in the
+ * switcher below the heading (screen 11a).
  */
 @Component({
   selector: 'df-portal-quotation',
   standalone: true,
-  imports: [FormsModule, MoneyPipe, ShortDatePipe, StatusChipComponent, LoadingComponent],
+  imports: [FormsModule, RouterLink, MoneyPipe, ShortDatePipe, StatusChipComponent, LoadingComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (store.loading()) {
@@ -37,7 +41,10 @@ import { PortalStore } from './portal.store';
       </div>
     } @else {
       @if (store.quotation(); as q) {
-      <div class="flex flex-wrap items-start justify-between gap-3">
+      @if (store.hasMultiple()) {
+        <a routerLink="/portal/quotations" class="text-sm text-slate-500 hover:text-slate-800">&larr; All quotations</a>
+      }
+      <div class="mt-1 flex flex-wrap items-start justify-between gap-3">
         <div>
           <p class="font-mono text-xs text-slate-400">{{ q.number }}</p>
           <h1 class="df-h1 mt-0.5">Quotation for {{ q.customerName }}</h1>
@@ -45,6 +52,21 @@ import { PortalStore } from './portal.store';
         </div>
         <df-status-chip kind="stage" [value]="q.stage" />
       </div>
+
+      <!-- one company, many quotations: the others are one tap away -->
+      @if (store.list().length > 1) {
+        <div class="df-scroll-x mt-4 flex gap-2 pb-1">
+          @for (item of store.list(); track item.id) {
+            <a [routerLink]="['/portal/q', item.number]"
+               class="df-chip whitespace-nowrap border transition"
+               [class]="item.number === q.number
+                 ? 'border-slate-900 bg-slate-900 text-white'
+                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'">
+              {{ item.number }}
+            </a>
+          }
+        </div>
+      }
 
       <!-- lines -->
       <div class="df-card df-scroll-x mt-6">
@@ -131,7 +153,7 @@ import { PortalStore } from './portal.store';
     }
   `,
 })
-export class PortalQuotationPage implements OnInit {
+export class PortalQuotationPage implements OnInit, OnChanges {
   protected readonly store = inject(PortalStore);
   private readonly toast = inject(ToastStore);
   readonly number = input<string>('');
@@ -141,7 +163,25 @@ export class PortalQuotationPage implements OnInit {
   requestedDeliveryDate = '';
   note = '';
 
-  ngOnInit(): void { void this.store.load(this.number() || undefined); }
+  /** `undefined` = nothing opened yet; `null` = "whichever quotation the session defaults to". */
+  private openedFor: string | null | undefined = undefined;
+
+  // The switcher navigates between /portal/q/:number without leaving the page,
+  // so the route parameter — not just the first render — drives what is loaded.
+  ngOnInit(): void { this.open(); }
+  ngOnChanges(): void { this.open(); }
+
+  private open(): void {
+    const target = this.number() || null;
+    if (this.openedFor === target) return;
+    this.openedFor = target;
+    this.comments = {};
+    this.counters = {};
+    this.requestedDeliveryDate = '';
+    this.note = '';
+    void this.store.load(target ?? undefined);
+    void this.store.loadList();
+  }
 
   categoryLabel(c: string): string { return CATEGORY_LABEL[c as keyof typeof CATEGORY_LABEL] ?? c; }
 

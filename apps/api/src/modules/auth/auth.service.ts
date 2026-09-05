@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
-import { LANDING_ROUTE, Role, type AuthSessionDto, type UserDto } from '@dealflow/shared';
+import { LANDING_ROUTE, QuoteStage, Role, type AuthSessionDto, type UserDto } from '@dealflow/shared';
 import { env } from '../../config/env.js';
-import { PortalToken, User } from '../../db/models.js';
+import { PortalToken, Quotation, User } from '../../db/models.js';
 import { signToken } from '../../middleware/auth.js';
 import { badRequest, unauthenticated } from '../../utils/apiError.js';
 import { toDto } from '../../utils/serialize.js';
@@ -29,13 +29,26 @@ export async function login(email: string, password: string): Promise<AuthSessio
 
   const session: AuthSessionDto = { token, expiresAt, user: toUserDto(user) };
 
-  // A customer landing straight on their live quotation is the whole point of
-  // the portal, so hand the UI the quotation their most recent link points at.
+  // A customer landing straight on a live quotation is the whole point of the
+  // portal, so hand the UI one to open. Their most recent magic link wins; with
+  // no live link we fall back to the company's most recently active quotation,
+  // because a company has many and the portal must not dead-end on none of them.
   if (user.role === Role.CUSTOMER) {
     const portal = await PortalToken.findOne({ customerId: user.customerId, revoked: false })
       .sort({ createdAt: -1 })
       .lean();
-    if (portal) session.portalQuotationId = String((portal as any).quotationId);
+    if (portal) {
+      session.portalQuotationId = String((portal as any).quotationId);
+    } else {
+      const latest = await Quotation.findOne({
+        customerId: user.customerId,
+        stage: { $ne: QuoteStage.DRAFT },
+      })
+        .sort({ lastActivityAt: -1, createdAt: -1 })
+        .select({ _id: 1 })
+        .lean();
+      if (latest) session.portalQuotationId = String((latest as any)._id);
+    }
   }
   return session;
 }

@@ -4,6 +4,11 @@
  * Everything here is computed by the shared pure functions — see seed/build.ts.
  * The headline record is Q-1042: two lines that produce riskScore 33 -> HIGH ->
  * [SALES_MANAGER, FINANCE], which is the number the whole demo hangs on.
+ *
+ * Note that every customer here carries SEVERAL quotations — Acme has Q-1042 and
+ * Q-1041, Beta has Q-1039, Q-1038, Q-1033 and Q-1029, Zenith and Orion two each.
+ * That is what the portal's quotation list is built on: `Quotation.customerId` is
+ * a plain many-to-one reference, so a company accumulates quotations over time.
  */
 import { CustomerTier, QuoteStage } from '@dealflow/shared';
 import { Quotation } from '../../db/models.js';
@@ -169,6 +174,60 @@ export async function seedQuotations(ctx: SeedContext): Promise<void> {
       validUntil: ctx.daysAhead(25), promisedDeliveryDate: ctx.daysAhead(30),
       approvalId: IDS.quotations.q1046,
       notes: 'Returned by M. Shah pending a margin justification.',
+    }).doc,
+
+    /* ---- Beta Industries' other quotations. ONE CUSTOMER, MANY QUOTATIONS —
+           R. Das signs into the portal and sees this whole list, not just the
+           one a magic link happened to point at. Q-1039 above is the fourth. ---- */
+
+    /* Q-1038 — approved and waiting on the customer. The one R. Das can confirm. */
+    buildQuotation({
+      _id: IDS.quotations.q1038, number: 'Q-1038',
+      customerId: IDS.customers.beta, customerName: 'Beta Industries', tier: CustomerTier.SILVER,
+      priceListId: IDS.priceLists.silver, priceList: PRICE_LISTS.SILVER,
+      ownerId: IDS.users.nair, ownerName: 'S. Nair',
+      stage: QuoteStage.APPROVED,
+      lines: [
+        { product: P.laptop, qty: 6, discountPct: 8 },
+        { product: P.mouse, qty: 6, discountPct: 5, addedFromUpsell: true },
+      ],
+      createdAt: ctx.daysAgo(9), submittedAt: ctx.daysAgo(8), lastActivityAt: ctx.daysAgo(7),
+      validUntil: ctx.daysAhead(21), promisedDeliveryDate: ctx.daysAhead(16),
+      notes: 'Second workstation batch for the Beta design team.',
+    }).doc,
+
+    /* Q-1033 — Beta's earlier purchase, already confirmed. */
+    buildQuotation({
+      _id: IDS.quotations.q1033, number: 'Q-1033',
+      customerId: IDS.customers.beta, customerName: 'Beta Industries', tier: CustomerTier.SILVER,
+      priceListId: IDS.priceLists.silver, priceList: PRICE_LISTS.SILVER,
+      ownerId: IDS.users.nair, ownerName: 'S. Nair',
+      stage: QuoteStage.CONFIRMED,
+      lines: [
+        { product: P.laptop, qty: 4, discountPct: 5 },
+        { product: P.dock, qty: 4, discountPct: 5 },
+      ],
+      createdAt: ctx.daysAgo(46), submittedAt: ctx.daysAgo(45), lastActivityAt: ctx.daysAgo(41),
+      validUntil: ctx.daysAgo(16), promisedDeliveryDate: ctx.daysAgo(30),
+      notes: 'Beta\'s first order with us.',
+    }).doc,
+
+    /* Q-1029 — still being negotiated, so the portal list shows a live conversation
+       as well as a finished one. Kept recently active on purpose: only the
+       deliberately idle quotes should register as stalled deals on screen 14. */
+    buildQuotation({
+      _id: IDS.quotations.q1029, number: 'Q-1029',
+      customerId: IDS.customers.beta, customerName: 'Beta Industries', tier: CustomerTier.SILVER,
+      priceListId: IDS.priceLists.silver, priceList: PRICE_LISTS.SILVER,
+      ownerId: IDS.users.nair, ownerName: 'S. Nair',
+      stage: QuoteStage.NEGOTIATION,
+      lines: [
+        { product: P.dock, qty: 12, discountPct: 12 },
+        { product: P.setup, qty: 2, discountPct: 8 },
+      ],
+      createdAt: ctx.daysAgo(7), submittedAt: ctx.daysAgo(6), lastActivityAt: ctx.hoursAgo(6),
+      validUntil: ctx.daysAhead(23), promisedDeliveryDate: ctx.daysAhead(18),
+      notes: 'R. Das is still asking about the docking-station volume.',
     }).doc,
 
     /* ---- Q-1046 — Orion Ltd, HIGH, already past the Manager, sitting in Finance.

@@ -12,7 +12,7 @@ import { log } from '../utils/logger.js';
 import { createSeedContext } from './context.js';
 import { orderedSeedModules } from './seeds.registry.js';
 import { credentialsTable } from './users.seed.js';
-import { PRIYA_PORTAL_TOKEN } from './modules/approvals.seed.js';
+import { DAS_PORTAL_TOKEN, PRIYA_PORTAL_TOKEN } from './modules/approvals.seed.js';
 import { env } from '../config/env.js';
 
 export interface SeedOptions {
@@ -83,7 +83,9 @@ export function printSummary(counts: Record<string, number>): void {
   console.log(credentialsTable());
   console.log('\nCustomer portal — ready to click');
   log.rule();
-  console.log(`  ${env.webBaseUrl}/portal/q/Q-1042?token=${PRIYA_PORTAL_TOKEN}`);
+  console.log(`  Acme / Priya   ${env.webBaseUrl}/portal/q/Q-1042?token=${PRIYA_PORTAL_TOKEN}`);
+  console.log(`  Beta / R. Das  ${env.webBaseUrl}/portal/q/Q-1038?token=${DAS_PORTAL_TOKEN}`);
+  console.log('  A link opens ONE quotation; a password login opens the whole company list.');
   console.log('\nApp URLs');
   log.rule();
   console.log(`  Web   ${env.webBaseUrl}`);

@@ -19,7 +19,9 @@ no setup - run `npm run reset` and sign in.
 | Customer — Acme Corp | Priya Menon | `priya@acmecorp.test` | `Demo@123` | `CUSTOMER` | /portal |
 | Customer — Beta Industries | R. Das | `das@betaindustries.test` | `Demo@123` | `CUSTOMER` | /portal |
 
-**Customer portal, ready to click:** http://localhost:4200/portal/q/Q-1042?token=demo-acme-q1042-2f7a91c4b8e04d16
+**Customer portal, ready to click:** http://localhost:4200/portal/q/Q-1042?token=demo-acme-q1042-2f7a91c4b8e04d16 (Acme Corp / Priya)
+
+**And a second company:** http://localhost:4200/portal/q/Q-1038?token=demo-beta-q1038-6c31d0af59b74e28 (Beta Industries / R. Das)
 
 <!-- END GENERATED CREDENTIALS -->
 
@@ -36,14 +38,24 @@ unless `SHOW_DEMO_LOGINS=true`.
 
 ## The customer portal, two ways in
 
-The portal accepts **either** path:
+The portal accepts **either** path, and the two are scoped differently:
 
-1. **Magic link** - the seeded, deterministic token in the URL above. The
+1. **Magic link** - the seeded, deterministic tokens in the URLs above. The
    `portalGuard` stashes the token and the HTTP interceptor sends it as
-   `X-Portal-Token` on every `/portal/*` request.
+   `X-Portal-Token` on every `/portal/*` request. A link unlocks **exactly one
+   quotation**, so the portal's list shows that one and says so.
 2. **Password login** - `priya@acmecorp.test` / `Demo@123`. A
-   `CUSTOMER` user is scoped to their own company, so the same restriction
-   applies either way.
+   `CUSTOMER` user is scoped to their own **company**, which means they see
+   **every quotation that company has been sent**, not just the last one linked.
+
+### One customer, many quotations
+
+Sign in as **R. Das** (`das@betaindustries.test`) and the portal opens on
+*My Quotations*: Beta Industries' whole set - one still in negotiation, one
+approved and waiting on him, one already confirmed, one sitting in internal
+approval - each with its own lines and its own message thread. Open his magic
+link instead and the same screen shows a single row, because that is all the
+link was minted for.
 
 ### The negative-auth demo (five seconds, and worth doing)
 

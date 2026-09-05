@@ -11,15 +11,22 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { env } from '../apps/api/src/config/env.js';
 import { DEMO_ACCOUNTS, credentialsMarkdown } from '../apps/api/src/seed/users.seed.js';
-import { PRIYA_PORTAL_TOKEN } from '../apps/api/src/seed/modules/approvals.seed.js';
+import { DAS_PORTAL_TOKEN, PRIYA_PORTAL_TOKEN } from '../apps/api/src/seed/modules/approvals.seed.js';
 import { log } from '../apps/api/src/utils/logger.js';
 
 const PORTAL_URL = `${env.webBaseUrl}/portal/q/Q-1042?token=${PRIYA_PORTAL_TOKEN}`;
+const PORTAL_URL_BETA = `${env.webBaseUrl}/portal/q/Q-1038?token=${DAS_PORTAL_TOKEN}`;
 const START = '<!-- BEGIN GENERATED CREDENTIALS -->';
 const END = '<!-- END GENERATED CREDENTIALS -->';
 
 function credentialsBlock(): string {
-  return [START, '', credentialsMarkdown(), '', `**Customer portal, ready to click:** ${PORTAL_URL}`, '', END].join('\n');
+  return [
+    START, '',
+    credentialsMarkdown(), '',
+    `**Customer portal, ready to click:** ${PORTAL_URL} (Acme Corp / Priya)`, '',
+    `**And a second company:** ${PORTAL_URL_BETA} (Beta Industries / R. Das)`, '',
+    END,
+  ].join('\n');
 }
 
 const body = `# Demo credentials
@@ -46,14 +53,24 @@ unless \`SHOW_DEMO_LOGINS=true\`.
 
 ## The customer portal, two ways in
 
-The portal accepts **either** path:
+The portal accepts **either** path, and the two are scoped differently:
 
-1. **Magic link** - the seeded, deterministic token in the URL above. The
+1. **Magic link** - the seeded, deterministic tokens in the URLs above. The
    \`portalGuard\` stashes the token and the HTTP interceptor sends it as
-   \`X-Portal-Token\` on every \`/portal/*\` request.
+   \`X-Portal-Token\` on every \`/portal/*\` request. A link unlocks **exactly one
+   quotation**, so the portal's list shows that one and says so.
 2. **Password login** - \`priya@acmecorp.test\` / \`${env.demoPassword}\`. A
-   \`CUSTOMER\` user is scoped to their own company, so the same restriction
-   applies either way.
+   \`CUSTOMER\` user is scoped to their own **company**, which means they see
+   **every quotation that company has been sent**, not just the last one linked.
+
+### One customer, many quotations
+
+Sign in as **R. Das** (\`das@betaindustries.test\`) and the portal opens on
+*My Quotations*: Beta Industries' whole set - one still in negotiation, one
+approved and waiting on him, one already confirmed, one sitting in internal
+approval - each with its own lines and its own message thread. Open his magic
+link instead and the same screen shows a single row, because that is all the
+link was minted for.
 
 ### The negative-auth demo (five seconds, and worth doing)
 

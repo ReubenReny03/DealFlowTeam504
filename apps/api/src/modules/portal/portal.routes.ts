@@ -6,6 +6,11 @@
  * access to any internal endpoint. An internal JWT does not open it, and a
  * portal token opens exactly ONE quotation — the one it was minted for.
  *
+ * A customer COMPANY, however, has many quotations over time. A portal user who
+ * signs in with a password sees every quotation their company has been sent
+ * (`GET /portal/quotations`) and can open any of them; a magic-link session is
+ * still narrowed to the single quotation the link was minted for.
+ *
  * The negative-auth demo lives here: R. Das signs in and cannot reach Acme
  * Corp's quotation, by link or by URL.
  */
@@ -28,6 +33,8 @@ import {
   type PortalCounterRequest,
   type PortalCounterResponse,
   type PortalConfirmResponse,
+  type PortalQuotationListResponse,
+  type PortalQuotationSummaryDto,
   type PortalResolveResponse,
   type PricedLine,
 } from '@dealflow/shared';
@@ -48,6 +55,7 @@ export const portalRouter = Router();
 mountModuleHealth(portalRouter, {
   module: 'portal', owner: 'C', screens: [11],
   implemented: [
+    'GET /quotations (every quotation for the signed-in company)',
     'GET /q/:number (token or customer login, scope-enforced)', 'GET /q/:number/messages',
     'POST /q/:number/comment', 'POST /q/:number/counter', 'POST /q/:number/confirm',
   ],
@@ -70,14 +78,88 @@ async function resolveQuotation(req: any, numberOrId: string) {
   return quotation as any;
 }
 
+/** Everything the customer is allowed to see: every stage except DRAFT. */
+const VISIBLE_TO_CUSTOMER = { $ne: QuoteStage.DRAFT };
+
+/**
+ * The filter for "this company's quotations". A password login gets the whole
+ * company; a magic-link session is narrowed to the single quotation the link was
+ * minted for, so the link's promise ("this opens one quotation") still holds.
+ */
+function portalQuotationFilter(req: any): Record<string, unknown> {
+  const portal = req.portal;
+  const filter: Record<string, unknown> = {
+    customerId: portal.customerId,
+    stage: VISIBLE_TO_CUSTOMER,
+  };
+  if (portal.quotationId) filter._id = portal.quotationId;
+  return filter;
+}
+
+async function countCompanyQuotations(req: any): Promise<number> {
+  return Quotation.countDocuments(portalQuotationFilter(req));
+}
+
+/**
+ * The customer's own quotation list. One company has many quotations over its
+ * lifetime — this is the screen that admits it, instead of pinning the portal to
+ * whichever one happened to be linked last.
+ */
+portalRouter.get(
+  '/quotations',
+  requirePortalToken,
+  asyncHandler(async (req, res) => {
+    const filter = portalQuotationFilter(req);
+    const [customer, quotations] = await Promise.all([
+      Customer.findById(req.portal!.customerId).lean(),
+      Quotation.find(filter).sort({ lastActivityAt: -1, createdAt: -1 }).lean(),
+    ]);
+    if (!customer) throw notFound('That company could not be found.');
+
+    // One aggregate for the whole list rather than a count query per row.
+    const messageCounts = new Map<string, number>();
+    if (quotations.length > 0) {
+      const grouped = await NegotiationEvent.aggregate([
+        { $match: { quotationId: { $in: quotations.map((q: any) => q._id) } } },
+        { $group: { _id: '$quotationId', n: { $sum: 1 } } },
+      ]);
+      for (const row of grouped) messageCounts.set(String(row._id), row.n as number);
+    }
+
+    const items: PortalQuotationSummaryDto[] = quotations.map((q: any) => ({
+      id: String(q._id),
+      number: q.number,
+      stage: q.stage,
+      currency: q.currency,
+      grandTotal: q.totals?.grandTotal ?? 0,
+      lineCount: q.lines?.length ?? 0,
+      createdAt: (q.createdAt as Date).toISOString(),
+      lastActivityAt: (q.lastActivityAt ?? q.createdAt as Date).toISOString(),
+      validUntil: q.validUntil ? (q.validUntil as Date).toISOString() : undefined,
+      promisedDeliveryDate: q.promisedDeliveryDate ? (q.promisedDeliveryDate as Date).toISOString() : undefined,
+      canConfirm: [QuoteStage.APPROVED, QuoteStage.NEGOTIATION].includes(q.stage),
+      awaitingApproval: q.stage === QuoteStage.PENDING_APPROVAL,
+      messageCount: messageCounts.get(String(q._id)) ?? 0,
+    }));
+
+    const payload: PortalQuotationListResponse = {
+      customer: toDto(customer),
+      items,
+      scopedToSingleQuotation: Boolean(req.portal!.quotationId),
+    };
+    ok(res, payload);
+  }),
+);
+
 portalRouter.get(
   '/q/:number',
   requirePortalToken,
   asyncHandler(async (req, res) => {
     const quotation = await resolveQuotation(req, req.params.number);
-    const [customer, events] = await Promise.all([
+    const [customer, events, siblingCount] = await Promise.all([
       Customer.findById(quotation.customerId).lean(),
       NegotiationEvent.find({ quotationId: quotation._id }).sort({ createdAt: 1 }).lean(),
+      countCompanyQuotations(req),
     ]);
     const payload: PortalResolveResponse = {
       quotation: toDto(quotation),
@@ -85,6 +167,7 @@ portalRouter.get(
       events: toDtoList(events),
       canConfirm: [QuoteStage.APPROVED, QuoteStage.NEGOTIATION].includes(quotation.stage),
       negotiationNotice: NEGOTIATION_NOTICE,
+      siblingCount,
     };
     ok(res, payload);
   }),

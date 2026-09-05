@@ -72,7 +72,8 @@ export const APP_ROUTES: Routes = [
     canActivate: [portalGuard],
     loadComponent: () => import('./layouts/portal-shell.component').then((m) => m.PortalShellComponent),
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'quotation' },
+      { path: '', pathMatch: 'full', redirectTo: 'quotations' },
+      { path: 'quotations', title: 'Your quotations', loadComponent: () => import('./portal/portal-quotations.page').then((m) => m.PortalQuotationsPage) },
       { path: 'quotation', title: 'Your quotation', loadComponent: () => import('./portal/portal-quotation.page').then((m) => m.PortalQuotationPage) },
       { path: 'q/:number', title: 'Your quotation', loadComponent: () => import('./portal/portal-quotation.page').then((m) => m.PortalQuotationPage) },
       { path: 'messages', title: 'Messages', loadComponent: () => import('./portal/portal-messages.page').then((m) => m.PortalMessagesPage) },
