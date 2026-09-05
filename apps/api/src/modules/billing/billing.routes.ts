@@ -18,7 +18,7 @@ import { mountModuleHealth } from '../module.health.js';
 export const billingRouter = Router();
 
 mountModuleHealth(billingRouter, {
-  module: 'billing', owner: 'D', screens: [10],
+  module: 'billing', domain: 'billing', screens: [10],
   implemented: [
     'GET /subscription/:id — one-time lines + recurring lines + invoices',
     'POST /run-schedule', 'GET /credit-notes',

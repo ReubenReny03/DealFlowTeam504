@@ -132,7 +132,7 @@ fallback adds ~10 s for the engine to start. `npm run demo:reset` is well inside
 | Angular build: `Unexpected closing block` | `@else if (x; as y)` — unsupported | use `@else { @if (x; as y) { … } }` (D-007) |
 | Angular build: `Opening tag not terminated` on a `[class.…/…]` | a Tailwind opacity class in a class binding | `[class]="cond ? 'bg-rose-50' : ''"` |
 | The frontend needs an endpoint that does not exist yet | your backend counterpart is behind | set `environment.useMocks = true` and keep going |
-| `GET /api/v1/<module>/_health` says `todo: […]` | that endpoint is not built | it names the owning agent. See their `AGENT_*.md`. |
+| `GET /api/v1/<module>/_health` says `todo: […]` | that endpoint is not built | it names the domain and the screens it serves. See `ARCHITECTURE.md`. |
 
 ---
 

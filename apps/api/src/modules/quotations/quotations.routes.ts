@@ -67,7 +67,7 @@ const WRITE_ROLES: Role[] = QUOTATION_WRITE_ROLES;
 
 mountModuleHealth(quotationsRouter, {
   module: 'quotations',
-  owner: 'B',
+  domain: 'quotations',
   screens: [2, 3, 4],
   implemented: [
     'GET /',

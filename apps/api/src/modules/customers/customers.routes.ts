@@ -15,7 +15,7 @@ import { mountReadonly } from '../readonly.factory.js';
 export const customersRouter = Router();
 
 mountModuleHealth(customersRouter, {
-  module: 'customers', owner: 'A', screens: [3, 11],
+  module: 'customers', domain: 'catalogue', screens: [3, 11],
   implemented: ['GET /', 'GET /:id', 'POST /', 'PATCH /:id'],
   todo: [],
 });

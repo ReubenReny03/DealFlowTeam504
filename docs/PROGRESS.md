@@ -4,12 +4,12 @@ The living status board. Cross-references `FEATURE_PRIORITY.md`'s ranking and
 each module's own `GET /<module>/_health` `todo` list — this file is the
 human-readable summary of both, kept current as work lands.
 
-**Update this file whenever a task from an `AGENT_*.md` table is completed or a
-new gap is found.** Move the row, don't just annotate it — a checklist that
+**Update this file whenever a piece of work lands or a new gap is found.** Move the row, don't just annotate it — a checklist that
 still shows something as pending after it shipped is worse than no checklist.
 
-**Last updated:** 2026-09-05, after **Phase E (Integration & Hardening)** — the
-Agent E role plus every remaining P2 polish item. See `PHASE_E.md`.
+**Last updated:** 2026-09-06, after the account-management and role-scoping work.
+Phase E (Integration & Hardening) covered every remaining P2 polish item — see
+`PHASE_E.md`.
 
 **Build health at last update:**
 
@@ -23,7 +23,7 @@ npm run build -w @dealflow/web → green (Angular template compile)
 
 ---
 
-## Agent A — Foundation, Auth, Admin — ✅ complete
+## platform, catalogue & governance — foundation, auth, admin — ✅ complete
 
 - [x] Shared contract: enums, DTOs, 9 pure functions (`packages/shared`)
 - [x] Blended risk engine — Q-1042 pins at exactly 33/HIGH
@@ -37,7 +37,7 @@ npm run build -w @dealflow/web → green (Angular template compile)
 - [x] 401/403 behaviour matches `USER_FLOWS` §E11/§E13 (redirect-back + expiry banner reason)
 - [x] Fixed `nextSeq()` counter bug (would have collided on the 2nd created quotation)
 
-## Agent B — Quotation Builder, Pricing, Risk, Upsell — ✅ complete
+## quotations — builder, pricing, risk, upsell — ✅ complete
 
 - [x] `quotations.seed.ts` — all 10 named quotations, computed via `buildQuotation()`
 - [x] Screen 2 (dashboard), Screen 3 (Kanban + table + real customer-picker "+ New Quotation")
@@ -51,7 +51,7 @@ npm run build -w @dealflow/web → green (Angular template compile)
 - [x] Resubmit-after-return audit trail (Submitted → Returned → Resubmitted)
 - [x] Search + pagination on the quotation list endpoint
 
-## Agent C — Approvals, Audit, Portal — ✅ complete
+## approvals & portal — approval chain, audit, negotiation — ✅ complete
 
 Read side was pre-built in the Phase-3 scaffold. All write endpoints below are
 now live, and the existing frontend (`ApprovalStore`, `PortalStore`, the
@@ -77,13 +77,13 @@ routes — no separate frontend-wiring pass was needed, only the backend.
       new risk breaches the thresholds, reopens the existing approval (or
       opens a new one) with `reEnteredFromNegotiation: true` and an audit
       entry `RE_ENTERED_FROM_NEGOTIATION` — confirmed live via smoke step 8
-- [x] `POST /portal/q/:number/confirm` → calls Agent D's
+- [x] `POST /portal/q/:number/confirm` → calls the inventory domain's
       `createOrderFromQuotation` directly (same codebase, no stub needed)
 - [x] `POST /:quotationId/comment` / `/counter` — the rep's internal-side reply to a negotiation thread (`NegotiationEventType.REP_REPLY`)
 - [x] `PATCH /notifications/:id/read`
 - [x] Frontend: screen 6's Approve/Return/Reject dialogs and the portal's comment/counter/confirm forms now succeed end to end (they were already wired to these routes; they just needed the backend to exist)
 
-## Agent D — Fulfillment, Billing, Deal Health, Reporting — ✅ complete
+## inventory, billing & analytics — fulfillment, billing, deal health, reporting — ✅ complete
 
 Read side (including reporting's 4 filters) was already real. All write
 endpoints below are now live.
@@ -119,11 +119,11 @@ endpoints below are now live.
 
 A follow-up sweep found a few things beyond C and D's own scope that were still incomplete, plus one bug the sweep itself introduced:
 
-- [x] `customers` module (Agent A): `POST /` and `PATCH /:id` — was in the `todo` list with no consuming UI, but is now a complete, typed CRUD endpoint (`UpsertCustomerRequest` added to the shared contract, logged in `CONTRACT_CHANGELOG.md`)
-- [x] `users` module (Agent A): `POST /` and `PATCH /:id` — create/deactivate an internal user, matching the `signup`/`login` hashing convention
+- [x] `customers` module: `POST /` and `PATCH /:id` — was in the `todo` list with no consuming UI, but is now a complete, typed CRUD endpoint (`UpsertCustomerRequest` added to the shared contract, logged in `CONTRACT_CHANGELOG.md`)
+- [x] `users` module: `POST /` and `PATCH /:id` — create/deactivate an internal user, matching the `signup`/`login` hashing convention
 - [x] `config` (screen 18): added a UI-side warning + save-blocking check that a higher customer tier's discount ceiling never drops below a lower tier's
 - [x] Every leftover "Not wired up yet — Agent X, task Y" toast (7 call sites across approvals, fulfillment, portal, invoices, deal-health) replaced with either a correct error path or removed in favour of the global HTTP interceptor's toast (avoids double-toasting the same error)
-- [x] All prose comments naming "Agent A/B/C/D" as if work were still pending, across ~12 files, reworded to describe the feature instead of a workstream
+- [x] Every reference to a lettered workstream removed from code and docs: `owner: 'A'|'B'|'C'|'D'` became a named `ModuleDomain`, and the five `AGENT_*.md` planning files were replaced by `ARCHITECTURE.md`
 - [x] **Bug found and fixed:** adding the `Fulfillment.reserved` bookkeeping field exposed (and briefly regressed) a mismatch between the seed's direct stock-reservation writes and that flag — fixed by setting `reserved: true` on every seeded fulfillment whose allocation is actually committed, and by making `POST /fulfillment/plan/:orderId` release its own prior reservation before recomputing (rather than refusing to re-plan once accepted, which broke smoke step 5)
 
 ## P1 differentiators
@@ -157,7 +157,7 @@ Sockets, email delivery, multi-tenant, drag-and-drop persistence,
 variant-level stock, forecasting, approval delegation — all correctly
 deferred per `DECISIONS.md`.
 
-## Cross-module contract tests (`AGENT_E_INTEGRATION.md`)
+## Cross-module contract tests
 
 | #   | Test                                                                                     | Status                                                                                                                                                |
 | --- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -179,11 +179,11 @@ Plus Phase E additions: **smoke 15** (magic-link reissue revokes the old link),
 
 ---
 
-## Agent E — Integration & Hardening — ✅ complete
+## integration & hardening — ✅ complete
 
 See `PHASE_E.md`. Closed every open P2 item (#29, #34, #35, #36, #37, #38),
 automated the manual cross-module sweeps (smoke 13–15, reset 14–16), and worked
-the three `AGENT_E_INTEGRATION.md` checkpoints. Three additive contract changes
+the three integration checkpoints. Three additive contract changes
 (`CONTRACT_CHANGELOG.md` #5–#7). No P0/P1 regression — the write sides of A/B/C/D
 are untouched.
 
@@ -195,7 +195,7 @@ are untouched.
 - [x] Cross-module contract tests #1–#11 all green — 7 as smoke steps, 4 already automated
 - [ ] Full demo script rehearsal (`DEMO_SCRIPT.md`) — every endpoint and screen is live and exercised by `npm run verify`; an actual timed click-through against the running app and the eight screenshot fallbacks are a person-with-the-app task, not done here
 
-**Bottom line:** A, B, C, D and the Agent E hardening pass are all complete.
+**Bottom line:** every domain and the hardening pass are complete.
 Every P0/P1/P2 row on this board is done or a documented deliberate non-goal
 (sockets, email delivery, field-level merge UI). The only outstanding item is a
 human demo rehearsal — nothing in code.

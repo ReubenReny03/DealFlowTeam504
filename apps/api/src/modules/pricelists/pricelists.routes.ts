@@ -15,7 +15,7 @@ import { mountReadonly } from '../readonly.factory.js';
 export const priceListsRouter = Router();
 
 mountModuleHealth(priceListsRouter, {
-  module: 'pricelists', owner: 'A', screens: [17],
+  module: 'pricelists', domain: 'catalogue', screens: [17],
   implemented: ['GET /', 'GET /:id', 'PUT /:id'],
   todo: [],
 });

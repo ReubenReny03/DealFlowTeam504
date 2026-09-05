@@ -34,7 +34,7 @@ import { loadConfig, toRiskConfig } from './config.service.js';
 export const configRouter = Router();
 
 mountModuleHealth(configRouter, {
-  module: 'config', owner: 'A', screens: [18],
+  module: 'config', domain: 'governance', screens: [18],
   implemented: ['GET /', 'PUT / (re-evaluates every open quotation)'],
   todo: [],
 });

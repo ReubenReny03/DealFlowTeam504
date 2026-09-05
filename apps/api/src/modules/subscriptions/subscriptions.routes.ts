@@ -28,7 +28,7 @@ export const subscriptionsRouter = Router();
 
 mountModuleHealth(subscriptionsRouter, {
   module: 'subscriptions',
-  owner: 'D',
+  domain: 'billing',
   screens: [9, 10],
   implemented: [
     'GET / (with active/paused/cancelled chips)',

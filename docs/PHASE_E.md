@@ -3,7 +3,7 @@
 **Status:** ✅ complete · `npm run verify` green (build + typecheck ×3 + lint 0 warnings +
 99 unit + reset **16/16** + smoke **16/16**) · `npm run build -w @dealflow/web` green.
 
-Phase E is the **Agent E role** from `AGENT_E_INTEGRATION.md` — "prove the four
+Phase E was the **integration and hardening pass** — "prove the
 slices are one product" — plus the last open **P2 polish** items from
 `PROGRESS.md`. A/B/C/D were already functionally complete on the write side; this
 phase closed every remaining `[ ]` on the board and automated the cross-module
@@ -95,7 +95,7 @@ smoke steps; the rest were already automated).
 
 ---
 
-## Checkpoint status (`AGENT_E_INTEGRATION.md`)
+## Checkpoint status
 
 ### Checkpoint 1 — "the spine is connected" ✅
 All seven personas sign in and land correctly (smoke 0 / reset 2). Every module

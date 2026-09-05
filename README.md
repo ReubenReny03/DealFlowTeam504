@@ -137,8 +137,8 @@ Asserted in three places: a unit test, a reset assertion, and a smoke step.
 | [`API_CONTRACT.md`](docs/API_CONTRACT.md) | every endpoint with example JSON |
 | [`UI_SPEC.md`](docs/UI_SPEC.md) | every screen: components, stores, states, exact copy |
 | [`FEATURE_PRIORITY.md`](docs/FEATURE_PRIORITY.md) | the ranked cut-line |
-| [`AGENT_A.md`](docs/AGENT_A.md) · [`B`](docs/AGENT_B.md) · [`C`](docs/AGENT_C.md) · [`D`](docs/AGENT_D.md) | the four parallel workstreams |
-| [`AGENT_E_INTEGRATION.md`](docs/AGENT_E_INTEGRATION.md) | merge protocol, checkpoints, cross-module tests |
+| [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) | the nine domains, what each owns, where the business rules live |
+| [`DB_DIAGRAM.md`](docs/DB_DIAGRAM.md) | every collection and how they connect, as a diagram |
 | [`DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) | the five-minute narration with fallbacks |
 | [`RUNBOOK.md`](docs/RUNBOOK.md) | setup, reset, troubleshooting |
 | [`DECISIONS.md`](docs/DECISIONS.md) | every judgement call, with its rationale |

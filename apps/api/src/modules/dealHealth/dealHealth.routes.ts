@@ -26,7 +26,7 @@ import { mountModuleHealth } from '../module.health.js';
 export const dealHealthRouter = Router();
 
 mountModuleHealth(dealHealthRouter, {
-  module: 'dealHealth', owner: 'D', screens: [14],
+  module: 'dealHealth', domain: 'analytics', screens: [14],
   implemented: ['GET / — the three tiles and the alert table', 'POST /evaluate', 'POST /:id/nudge', 'POST /:id/escalate'],
   todo: [],
 });

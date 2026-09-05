@@ -30,7 +30,7 @@ export const invoicesRouter = Router();
 
 mountModuleHealth(invoicesRouter, {
   module: 'invoices',
-  owner: 'D',
+  domain: 'billing',
   screens: [12, 13],
   implemented: [
     'GET / (with unpaid/paid chips)',

@@ -1,0 +1,110 @@
+# Architecture
+
+How DealFlow360 is put together: the nine domains, what each one owns, and where
+the business rules actually live.
+
+Every API module reports its own domain at `GET /api/v1/<module>/_health`, and
+`GET /api/v1/_routes` lists all of them. The same nine names appear on
+`SCREEN_REGISTRY` in `packages/shared`, so a screen, its endpoints and its seed
+data are always labelled the same way.
+
+---
+
+## The shape of the system
+
+```
+packages/shared          the frozen contract + every pure business rule
+      │                  (enums, DTOs, pricing, risk, billing, upsell,
+      │                   warehouse split, deal health)
+      ├──────────────────────────────┐
+      ▼                              ▼
+apps/api  (Express + Mongoose)   apps/web  (Angular, standalone + signals)
+  routes.registry.ts               app.routes.ts
+  one module per domain            one feature folder per screen
+```
+
+The rule that makes this work: **a business rule is written once, in
+`packages/shared`, and imported by both sides.** The API calls
+`calculateBlendedRisk` on submit; the Angular quotation builder calls the same
+function on every keystroke. The optimistic preview therefore cannot disagree
+with what the server stores (D-020).
+
+---
+
+## The nine domains
+
+| Domain | API modules | Owns (collections) | Screens |
+|---|---|---|---|
+| **platform** | `health`, `auth`, `users` | `User` | 1, 19 |
+| **catalogue** | `products`, `pricelists`, `customers`, `subscription-plans` | `Product`, `PriceList`, `ProductPairing`, `Customer`, `SubscriptionPlan` | 16, 17 |
+| **governance** | `config` | `ApprovalChainConfig` | 18 |
+| **quotations** | `quotations`, `pricing`, `risk`, `upsell` | `Quotation`, `Counter` | 2, 3, 4 |
+| **approvals** | `approvals`, `audit` | `Approval`, `AuditLog` | 5, 6 |
+| **portal** | `portal`, `negotiation`, `notifications` | `PortalToken`, `NegotiationEvent`, `Notification` | 11 |
+| **inventory** | `warehouses`, `stock`, `orders`, `fulfillment` | `Warehouse`, `Stock`, `Order`, `Fulfillment` | 7, 8 |
+| **billing** | `billing`, `subscriptions`, `invoices`, `payments` | `Subscription`, `Invoice`, `CreditNote` | 9, 10, 12, 13 |
+| **analytics** | `deal-health`, `reporting` | `DealAlert` | 14, 15 |
+
+`payments` has no collection of its own — a payment always belongs to one
+invoice, so it is an embedded array and the endpoint is mounted on the invoices
+router.
+
+---
+
+## Where the business rules live
+
+Every rule below is a **pure function** in `packages/shared/src/logic`, with unit
+tests and no database access. That is what makes them testable, and what lets the
+UI preview a result the server will agree with.
+
+| Rule | Function | File | Used by |
+|---|---|---|---|
+| Line pricing, tax, margin | `computeLinePricing`, `computeQuoteTotals`, `computeMargin` | `pricing.ts` | quotations, orders, invoices, portal |
+| Blended discount risk + routing | `calculateBlendedRisk`, `resolveApprovalChain` | `risk.ts` | quotations (submit), config (re-score), portal (re-entry) |
+| Warehouse split planning | `planWarehouseSplit`, `checkBackorderConsolidation` | `warehouse.ts` | fulfillment, stock |
+| Proration and billing dates | `prorate`, `nextBillingDates` | `billing.ts` | orders, subscriptions, billing |
+| Upsell ranking | `rankUpsells` | `upsell.ts` | upsell |
+| Stalled / anomaly / slippage | `detectDealHealth` | `dealHealth.ts` | deal-health |
+
+Nothing about these is hardcoded: they all read thresholds from
+`ApprovalChainConfig`, which screen 18 edits live.
+
+---
+
+## Request lifecycle
+
+```
+request
+  → attachUser          verifies the JWT signature and expiry (never throws)
+  → <module> router
+      → requireAuth     re-reads the account: still exists, still active, and
+                        the role enforced is the DB's, not the token's (D-035)
+      → validate(zod)   rejects a malformed body with a field-level 400
+      → handler         business rule from packages/shared, then persistence
+      → writeAudit      actor, action, entity, before/after, reason
+  → errorHandler        one envelope: { success, data, error }
+```
+
+Read-side scoping sits between auth and the query: `utils/roleScope.ts` narrows
+what a role may **see** (Finance's quotation list and approval queue), separately
+from what a role may **do**.
+
+---
+
+## The append-only registries
+
+Three files are only ever appended to, never restructured:
+
+- `apps/api/src/routes.registry.ts` — one line mounts a module; `app.ts` never changes.
+- `apps/api/src/seed/seeds.registry.ts` — one line per seed module, with an explicit `order` for dependencies.
+- `packages/shared/src/constants.ts` → `SCREEN_REGISTRY` — the screen list the docs and router agree on.
+
+---
+
+## Related documents
+
+- `DATA_MODEL.md` — every collection, field by field.
+- `DB_DIAGRAM.md` — the same thing as a diagram, with the relationships drawn.
+- `API_CONTRACT.md` — every endpoint, its auth and its shape.
+- `BUSINESS_RULES.md` — the rules in prose, with worked examples.
+- `DECISIONS.md` — why each non-obvious choice was made.

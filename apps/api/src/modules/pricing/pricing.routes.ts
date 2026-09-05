@@ -12,7 +12,7 @@ import { priceLinesForCustomer } from './pricing.service.js';
 export const pricingRouter = Router();
 
 mountModuleHealth(pricingRouter, {
-  module: 'pricing', owner: 'B', screens: [4],
+  module: 'pricing', domain: 'quotations', screens: [4],
   implemented: ['GET /_health', 'POST /preview'],
   todo: [],
 });

@@ -5,7 +5,7 @@ Quotation → blended-risk approval → customer negotiation → multi-warehouse
 fulfillment → hybrid billing → analytics.
 
 This is the shared brain. Read it first. Then read `USER_FLOWS.md`, then your own
-`AGENT_*.md`.
+`ARCHITECTURE.md`.
 
 | Document | What it is for |
 |---|---|
@@ -16,8 +16,8 @@ This is the shared brain. Read it first. Then read `USER_FLOWS.md`, then your ow
 | `API_CONTRACT.md` | every endpoint, with example JSON |
 | `UI_SPEC.md` | every screen: component tree, stores, states, exact copy |
 | `FEATURE_PRIORITY.md` | the ranked cut-line |
-| `AGENT_A–D.md` | the four parallel workstreams |
-| `AGENT_E_INTEGRATION.md` | merge protocol, checkpoints, cross-module tests |
+| `ARCHITECTURE.md` | the nine domains, what each owns, where the business rules live |
+| `DB_DIAGRAM.md` | every collection and how they connect, as a diagram |
 | `DEMO_SCRIPT.md` | the five-minute narration |
 | `RUNBOOK.md` | setup, reset, troubleshooting |
 | `DECISIONS.md` | every judgement call, with its rationale |

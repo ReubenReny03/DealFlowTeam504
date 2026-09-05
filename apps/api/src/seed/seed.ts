@@ -62,7 +62,7 @@ export async function runSeed(options: SeedOptions = {}): Promise<{ counts: Reco
   for (const mod of modules) {
     const started = Date.now();
     await mod.run(ctx);
-    say(`seed:${mod.name} (owner ${mod.owner}) — ${Date.now() - started}ms`);
+    say(`seed:${mod.name} (${mod.domain}) — ${Date.now() - started}ms`);
   }
 
   const counts: Record<string, number> = {};

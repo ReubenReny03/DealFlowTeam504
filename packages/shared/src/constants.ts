@@ -303,138 +303,158 @@ export const NO_MATCHES = {
   cta: 'Clear search',
 };
 
-/** The 18 screens, so docs, routing and the screen-to-journey map cannot drift. */
+/**
+ * Every screen in the product, so docs, routing and the screen-to-journey map
+ * cannot drift. `domain` names the part of the system that serves the screen and
+ * matches the API's own `ModuleDomain`.
+ */
 export const SCREEN_REGISTRY: {
   id: number;
   name: string;
   route: string;
   personas: Role[];
-  owner: 'A' | 'B' | 'C' | 'D';
+  domain:
+    | 'platform'
+    | 'catalogue'
+    | 'governance'
+    | 'quotations'
+    | 'approvals'
+    | 'portal'
+    | 'inventory'
+    | 'billing'
+    | 'analytics';
 }[] = [
   {
     id: 1,
-    name: 'Login / Signup',
+    name: 'Sign in',
     route: '/login',
     personas: [Role.ADMIN, Role.SALES_REP, Role.SALES_MANAGER, Role.FINANCE, Role.CUSTOMER],
-    owner: 'A',
+    domain: 'platform',
   },
   {
     id: 2,
     name: 'Sales Dashboard',
     route: '/app/dashboard',
     personas: [Role.SALES_REP, Role.SALES_MANAGER, Role.ADMIN],
-    owner: 'B',
+    domain: 'quotations',
   },
   {
     id: 3,
     name: 'Quotations (List)',
     route: '/app/quotations',
     personas: [Role.SALES_REP, Role.SALES_MANAGER, Role.ADMIN],
-    owner: 'B',
+    domain: 'quotations',
   },
   {
     id: 4,
     name: 'Quotation Detail',
     route: '/app/quotations/:id',
     personas: [Role.SALES_REP, Role.SALES_MANAGER],
-    owner: 'B',
+    domain: 'quotations',
   },
   {
     id: 5,
     name: 'Approvals (List)',
     route: '/app/approvals',
     personas: [Role.SALES_MANAGER, Role.FINANCE, Role.ADMIN],
-    owner: 'C',
+    domain: 'approvals',
   },
   {
     id: 6,
     name: 'Approval Detail',
     route: '/app/approvals/:id',
     personas: [Role.SALES_MANAGER, Role.FINANCE],
-    owner: 'C',
+    domain: 'approvals',
   },
   {
     id: 7,
     name: 'Fulfillment and Stock',
     route: '/app/fulfillment',
     personas: [Role.FINANCE, Role.SALES_MANAGER, Role.ADMIN],
-    owner: 'D',
+    domain: 'inventory',
   },
   {
     id: 8,
     name: 'Fulfillment Detail',
     route: '/app/fulfillment/:id',
     personas: [Role.FINANCE, Role.SALES_MANAGER],
-    owner: 'D',
+    domain: 'inventory',
   },
   {
     id: 9,
     name: 'Subscriptions (List)',
     route: '/app/subscriptions',
     personas: [Role.FINANCE, Role.SALES_MANAGER, Role.ADMIN],
-    owner: 'D',
+    domain: 'billing',
   },
   {
     id: 10,
     name: 'Billing Detail',
     route: '/app/subscriptions/:id',
     personas: [Role.FINANCE, Role.SALES_MANAGER],
-    owner: 'D',
+    domain: 'billing',
   },
   {
     id: 11,
     name: 'Customer Portal Negotiation',
     route: '/portal/q/:number',
     personas: [Role.CUSTOMER],
-    owner: 'C',
+    domain: 'portal',
   },
   {
     id: 12,
     name: 'Invoices (List)',
     route: '/app/invoices',
     personas: [Role.FINANCE, Role.SALES_MANAGER, Role.ADMIN],
-    owner: 'D',
+    domain: 'billing',
   },
   {
     id: 13,
     name: 'Invoice Detail',
     route: '/app/invoices/:id',
     personas: [Role.FINANCE, Role.SALES_MANAGER],
-    owner: 'D',
+    domain: 'billing',
   },
   {
     id: 14,
     name: 'Deal Health & Anomaly Dashboard',
     route: '/app/deal-health',
     personas: [Role.SALES_MANAGER, Role.SALES_REP, Role.ADMIN],
-    owner: 'D',
+    domain: 'analytics',
   },
   {
     id: 15,
     name: 'Admin / Reporting Dashboard',
     route: '/app/reports',
     personas: [Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE],
-    owner: 'D',
+    domain: 'analytics',
   },
   {
     id: 16,
     name: 'Product Dashboard',
     route: '/admin/products',
     personas: [Role.ADMIN, Role.SALES_MANAGER],
-    owner: 'A',
+    domain: 'catalogue',
   },
   {
     id: 17,
     name: 'Product Details',
     route: '/admin/products/:id',
     personas: [Role.ADMIN],
-    owner: 'A',
+    domain: 'catalogue',
   },
   {
     id: 18,
     name: 'Discount Tiers & Approval Chain Setup',
     route: '/admin/config',
     personas: [Role.ADMIN, Role.SALES_MANAGER],
-    owner: 'A',
+    domain: 'governance',
+  },
+  {
+    id: 19,
+    name: 'Users',
+    route: '/admin/users',
+    personas: [Role.ADMIN],
+    domain: 'platform',
   },
 ];

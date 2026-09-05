@@ -26,7 +26,7 @@ import { planAndApply, stockAndWarehouseCatalog, toSplitBackorders } from './ful
 export const fulfillmentRouter = Router();
 
 mountModuleHealth(fulfillmentRouter, {
-  module: 'fulfillment', owner: 'D', screens: [7, 8],
+  module: 'fulfillment', domain: 'inventory', screens: [7, 8],
   implemented: [
     'GET / (live stock + orders awaiting fulfillment)', 'GET /:id',
     'POST /plan/:orderId', 'POST /:id/accept', 'POST /:id/override', 'POST /:id/ship',

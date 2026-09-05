@@ -16,7 +16,7 @@ import { changePassword, login, toUserDto } from './auth.service.js';
 export const authRouter = Router();
 
 mountModuleHealth(authRouter, {
-  module: 'auth', owner: 'A', screens: [1],
+  module: 'auth', domain: 'platform', screens: [1],
   implemented: ['POST /login', 'POST /change-password', 'GET /me', 'GET /demo-accounts'],
   todo: ['password reset (out of scope — see docs/FEATURE_PRIORITY.md P3)'],
 });

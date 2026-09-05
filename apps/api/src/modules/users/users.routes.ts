@@ -17,7 +17,7 @@ import { toUserDto } from '../auth/auth.service.js';
 export const usersRouter = Router();
 
 mountModuleHealth(usersRouter, {
-  module: 'users', owner: 'A', screens: [1, 19],
+  module: 'users', domain: 'platform', screens: [1, 19],
   implemented: ['GET /', 'GET /:id', 'POST / (internal or customer account)', 'PATCH /:id (deactivate or edit)'],
   todo: [],
 });

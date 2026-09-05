@@ -27,7 +27,7 @@ import { mountReadonly } from '../readonly.factory.js';
 export const productsRouter = Router();
 
 mountModuleHealth(productsRouter, {
-  module: 'products', owner: 'A', screens: [16, 17],
+  module: 'products', domain: 'catalogue', screens: [16, 17],
   implemented: ['GET /', 'GET /:id', 'GET /:id/stock', 'GET /dashboard', 'POST /', 'PUT /:id'],
   todo: [],
 });

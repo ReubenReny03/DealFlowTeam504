@@ -20,7 +20,7 @@ export const notificationsRouter = Router();
 
 mountModuleHealth(notificationsRouter, {
   module: 'notifications',
-  owner: 'C',
+  domain: 'portal',
   screens: [2, 14],
   implemented: [
     'GET / (scoped, paginated, unreadCount)',

@@ -54,7 +54,7 @@ import { createOrderFromQuotation } from '../orders/orders.service.js';
 export const portalRouter = Router();
 
 mountModuleHealth(portalRouter, {
-  module: 'portal', owner: 'C', screens: [11],
+  module: 'portal', domain: 'portal', screens: [11],
   implemented: [
     'GET /quotations (every quotation for the signed-in company)',
     'GET /q/:number (token or customer login, scope-enforced)', 'GET /q/:number/messages',

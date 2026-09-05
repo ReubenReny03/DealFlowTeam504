@@ -1,14 +1,26 @@
 /**
- * Every module mounts this so `npm run dev:api` is green from minute one, even
- * before its business logic exists. GET /api/v1/<module>/_health tells you
- * whether the module is wired, who owns it, and what is still stubbed.
+ * Every module mounts this, so `GET /api/v1/<module>/_health` reports whether the
+ * module is wired, which part of the system it belongs to, which screens it
+ * serves, and which of its endpoints are live.
  */
 import { Router } from 'express';
 import { ok } from '../utils/respond.js';
 
+/** The area of the system a module belongs to. */
+export type ModuleDomain =
+  | 'platform'    // health, auth, accounts
+  | 'catalogue'   // products, price lists, customers, plans
+  | 'governance'  // discount ceilings and the approval chain
+  | 'quotations'  // building, pricing, risk-scoring and upselling a quote
+  | 'approvals'   // the approval state machine and the audit trail
+  | 'portal'      // the customer-facing surface and negotiation
+  | 'inventory'   // warehouses, stock, orders and fulfillment
+  | 'billing'     // subscriptions, invoices and payments
+  | 'analytics';  // deal health and reporting
+
 export interface ModuleHealth {
   module: string;
-  owner: 'A' | 'B' | 'C' | 'D';
+  domain: ModuleDomain;
   screens: number[];
   implemented: string[];
   todo: string[];

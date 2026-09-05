@@ -40,7 +40,7 @@ const results: {
   title: string;
   status: 'PASS' | 'PENDING' | 'FAIL';
   note: string;
-  owner?: string;
+  domain?: string;
 }[] = [];
 
 interface Res<T = any> {
@@ -73,7 +73,7 @@ async function api<T = any>(
 
 class Pending extends Error {
   constructor(
-    public readonly owner: string,
+    public readonly domain: string,
     message: string,
   ) {
     super(message);
@@ -85,34 +85,34 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 /** Treat a not-yet-built endpoint as PENDING rather than a failure. */
-function expectBuilt(res: Res, owner: string, what: string): void {
+function expectBuilt(res: Res, domain: string, what: string): void {
   if (
     res.status === 404 &&
     res.body.error?.code === 'NOT_FOUND' &&
     /No route matches/.test(res.body.error.message)
   ) {
-    throw new Pending(owner, `${what} is not implemented yet`);
+    throw new Pending(domain, `${what} is not implemented yet`);
   }
-  if (res.status === 501) throw new Pending(owner, `${what} is stubbed`);
+  if (res.status === 501) throw new Pending(domain, `${what} is stubbed`);
 }
 
 async function step(
   n: number,
   title: string,
-  owner: string,
+  domain: string,
   run: () => Promise<string>,
 ): Promise<void> {
   try {
     const note = await run();
-    results.push({ n, title, status: 'PASS', note, owner });
+    results.push({ n, title, status: 'PASS', note, domain });
     log.ok(`step ${n}: ${title}\n      ${note}`);
   } catch (err) {
     if (err instanceof Pending) {
-      results.push({ n, title, status: 'PENDING', note: err.message, owner: err.owner });
-      console.log(`  ⧗ step ${n}: ${title}\n      awaiting Agent ${err.owner} — ${err.message}`);
+      results.push({ n, title, status: 'PENDING', note: err.message, domain: err.domain });
+      console.log(`  ⧗ step ${n}: ${title}\n      awaiting the ${err.domain} module — ${err.message}`);
       return;
     }
-    results.push({ n, title, status: 'FAIL', note: (err as Error).message, owner });
+    results.push({ n, title, status: 'FAIL', note: (err as Error).message, domain });
     log.error(`step ${n}: ${title}\n      ${(err as Error).message}`);
   }
 }
@@ -144,7 +144,7 @@ async function main(): Promise<void> {
   await step(
     0,
     'All seven demo credentials authenticate and land on the correct screen',
-    'A',
+    'platform',
     async () => {
       const accounts = await api('GET', '/auth/demo-accounts');
       assert(
@@ -178,7 +178,7 @@ async function main(): Promise<void> {
   await step(
     1,
     'Backend configuration is present (discount tiers, warehouse, subscription plan)',
-    'A',
+    'platform',
     async () => {
       const config = await api('GET', '/config', { token: tokens[Role.ADMIN] });
       assert(config.status === 200, 'config endpoint failed');
@@ -199,7 +199,7 @@ async function main(): Promise<void> {
   await step(
     2,
     'A quotation with an over-limit discount is scored, not accepted silently',
-    'B',
+    'quotations',
     async () => {
       const res = await api('GET', '/quotations?q=Q-1042', { token: tokens[Role.SALES_REP] });
       assert(res.status === 200, 'quotation list failed');
@@ -217,7 +217,7 @@ async function main(): Promise<void> {
   );
 
   /* ---- 3. The quote asks for approval by itself ---- */
-  await step(3, 'The quotation routed itself for approval — the rep never asked', 'C', async () => {
+  await step(3, 'The quotation routed itself for approval — the rep never asked', 'approvals', async () => {
     const res = await api('GET', '/approvals?pendingOnly=true', {
       token: tokens[Role.SALES_MANAGER],
     });
@@ -245,12 +245,12 @@ async function main(): Promise<void> {
   await step(
     4,
     'Accepting an upsell suggestion updates the order total and margin immediately',
-    'B',
+    'quotations',
     async () => {
       const res = await api('GET', '/upsell/suggestions?quotationId=Q-1042', {
         token: tokens[Role.SALES_REP],
       });
-      expectBuilt(res, 'B', 'GET /upsell/suggestions');
+      expectBuilt(res, 'quotations', 'GET /upsell/suggestions');
       assert(res.status === 200, `upsell suggestions failed: ${res.body.error?.message}`);
       assert(res.body.data.length > 0, 'expected at least one upsell suggestion');
       assert(
@@ -265,7 +265,7 @@ async function main(): Promise<void> {
   await step(
     5,
     'Stock is pulled from the correct warehouses, splitting across two when needed',
-    'D',
+    'inventory',
     async () => {
       const overview = await api('GET', '/fulfillment', { token: tokens[Role.FINANCE] });
       assert(overview.status === 200, 'fulfillment overview failed');
@@ -287,7 +287,7 @@ async function main(): Promise<void> {
       assert(backorder, 'expected at least one order sitting on backorder');
 
       const plan = await api('POST', '/fulfillment/plan/ORD-1032', { token: tokens[Role.FINANCE] });
-      expectBuilt(plan, 'D', 'POST /fulfillment/plan/:orderId');
+      expectBuilt(plan, 'inventory', 'POST /fulfillment/plan/:orderId');
       assert(plan.status === 200, `split planning failed: ${plan.body.error?.message}`);
       assert(plan.body.data.rationale?.length > 0, 'the split must explain itself');
       return `Main 18 / East 6 available; ${backorder.orderNumber} is on backorder with a rationale`;
@@ -298,7 +298,7 @@ async function main(): Promise<void> {
   await step(
     6,
     'One order produces a one-time invoice AND a separate recurring schedule',
-    'D',
+    'inventory',
     async () => {
       const invoices = await api('GET', '/invoices', { token: tokens[Role.FINANCE] });
       assert(invoices.status === 200, 'invoice list failed');
@@ -333,7 +333,7 @@ async function main(): Promise<void> {
   );
 
   /* ---- 7. The portal, and the negative auth test ---- */
-  await step(7, 'The customer portal is a genuinely restricted surface', 'C', async () => {
+  await step(7, 'The customer portal is a genuinely restricted surface', 'approvals', async () => {
     // Priya's magic link opens exactly her quotation.
     const priya = await api('GET', '/portal/q/Q-1042', { portalToken: PRIYA_PORTAL_TOKEN });
     assert(
@@ -366,7 +366,7 @@ async function main(): Promise<void> {
     const dasList = await api('GET', '/portal/quotations', {
       token: tokens['das@betaindustries.test'],
     });
-    expectBuilt(dasList, 'C', 'GET /portal/quotations');
+    expectBuilt(dasList, 'approvals', 'GET /portal/quotations');
     assert(dasList.status === 200, `R. Das could not list his quotations: ${dasList.body.error?.message}`);
     const dasItems = dasList.body.data.items as { number: string; stage: string }[];
     assert(dasItems.length > 1, `expected Beta to have several quotations, got ${dasItems.length}`);
@@ -398,7 +398,7 @@ async function main(): Promise<void> {
 
     // A magic link, by contrast, still unlocks exactly the one it was minted for.
     const linkList = await api('GET', '/portal/quotations', { portalToken: PRIYA_PORTAL_TOKEN });
-    expectBuilt(linkList, 'C', 'GET /portal/quotations');
+    expectBuilt(linkList, 'approvals', 'GET /portal/quotations');
     assert(
       linkList.body.data.items.length === 1 && linkList.body.data.items[0].number === 'Q-1042',
       'a magic link must list exactly the quotation it was minted for',
@@ -415,7 +415,7 @@ async function main(): Promise<void> {
   await step(
     8,
     'A customer counter-offer sends the quote back for approval automatically',
-    'C',
+    'approvals',
     async () => {
       const res = await api('POST', '/portal/q/Q-1042/counter', {
         portalToken: PRIYA_PORTAL_TOKEN,
@@ -424,7 +424,7 @@ async function main(): Promise<void> {
           note: 'Can you do better on the setup fee?',
         },
       });
-      expectBuilt(res, 'C', 'POST /portal/q/:number/counter');
+      expectBuilt(res, 'approvals', 'POST /portal/q/:number/counter');
       assert(res.status === 200, `counter failed: ${res.body.error?.message}`);
       assert(
         res.body.data.reEnteredApproval === true,
@@ -439,7 +439,7 @@ async function main(): Promise<void> {
   );
 
   /* ---- 9. Record a payment ---- */
-  await step(9, 'Recording a payment advances the invoice and the order stepper', 'D', async () => {
+  await step(9, 'Recording a payment advances the invoice and the order stepper', 'inventory', async () => {
     const invoice = await api('GET', '/invoices/INV-1042', { token: tokens[Role.FINANCE] });
     assert(invoice.status === 200, 'invoice detail failed');
     const res = await api('POST', `/invoices/${invoice.body.data.invoice.id}/payments`, {
@@ -450,14 +450,14 @@ async function main(): Promise<void> {
         reference: 'SMOKE-001',
       },
     });
-    expectBuilt(res, 'D', 'POST /invoices/:id/payments');
+    expectBuilt(res, 'inventory', 'POST /invoices/:id/payments');
     assert(res.status === 200 || res.status === 201, `payment failed: ${res.body.error?.message}`);
     assert(res.body.data.status === 'PAID', `invoice should be PAID, got ${res.body.data.status}`);
     return 'INV-1042 paid in full; order stepper advanced to Paid';
   });
 
   /* ---- 10. Deal health ---- */
-  await step(10, 'Deal Health flags stalled deals and discount anomalies', 'D', async () => {
+  await step(10, 'Deal Health flags stalled deals and discount anomalies', 'inventory', async () => {
     const res = await api('GET', '/deal-health', { token: tokens[Role.SALES_MANAGER] });
     assert(res.status === 200, 'deal health dashboard failed');
     assert(res.body.data.stalledDeals >= 1, 'expected at least one stalled deal');
@@ -471,7 +471,7 @@ async function main(): Promise<void> {
   });
 
   /* ---- 11. Reporting ---- */
-  await step(11, 'Reporting KPIs aggregate from real documents', 'D', async () => {
+  await step(11, 'Reporting KPIs aggregate from real documents', 'inventory', async () => {
     const res = await api('GET', '/reporting?period=month', { token: tokens[Role.ADMIN] });
     assert(res.status === 200, 'reporting failed');
     assert(
@@ -487,7 +487,7 @@ async function main(): Promise<void> {
   await step(
     12,
     'Changing a discount ceiling re-evaluates open quotations immediately',
-    'A',
+    'platform',
     async () => {
       const before = await api('GET', '/quotations?q=Q-1042', { token: tokens[Role.ADMIN] });
       const beforeQuote = before.body.data.find((q: any) => q.number === 'Q-1042');
@@ -536,7 +536,7 @@ async function main(): Promise<void> {
   await step(
     13,
     'Restocking a warehouse flips a covered backorder to consolidation-available',
-    'D',
+    'inventory',
     async () => {
       const overview = await api('GET', '/fulfillment', { token: tokens[Role.FINANCE] });
       assert(overview.status === 200, 'fulfillment overview failed');
@@ -574,7 +574,7 @@ async function main(): Promise<void> {
           reason: 'Smoke test: restock to cover the outstanding backorder',
         },
       });
-      expectBuilt(adjust, 'D', 'POST /stock/adjust');
+      expectBuilt(adjust, 'inventory', 'POST /stock/adjust');
       assert(adjust.status === 200, `stock adjust failed: ${adjust.body.error?.message}`);
       assert(
         adjust.body.data.consolidationAvailableFor.includes(backorder.orderNumber),
@@ -596,7 +596,7 @@ async function main(): Promise<void> {
   await step(
     14,
     'An escalation notifies its recipient, and "mark all read" clears the badge',
-    'C',
+    'approvals',
     async () => {
       const alerts = await api('GET', '/deal-health', { token: tokens[Role.SALES_MANAGER] });
       assert(
@@ -609,11 +609,11 @@ async function main(): Promise<void> {
         token: tokens[Role.SALES_MANAGER],
         body: { note: 'Smoke test: escalate to exercise the notification centre' },
       });
-      expectBuilt(escalate, 'D', 'POST /deal-health/:id/escalate');
+      expectBuilt(escalate, 'inventory', 'POST /deal-health/:id/escalate');
       assert(escalate.status === 200, `escalate failed: ${escalate.body.error?.message}`);
 
       const unread = await api('GET', '/notifications', { token: tokens[Role.SALES_MANAGER] });
-      expectBuilt(unread, 'C', 'GET /notifications');
+      expectBuilt(unread, 'approvals', 'GET /notifications');
       assert(unread.status === 200, `notifications list failed: ${unread.body.error?.message}`);
       assert(
         unread.body.data.unreadCount >= 1,
@@ -627,7 +627,7 @@ async function main(): Promise<void> {
       const readAll = await api('POST', '/notifications/read-all', {
         token: tokens[Role.SALES_MANAGER],
       });
-      expectBuilt(readAll, 'C', 'POST /notifications/read-all');
+      expectBuilt(readAll, 'approvals', 'POST /notifications/read-all');
       assert(
         readAll.status === 200 && readAll.body.data.updated >= 1,
         'read-all should mark at least one notification read',
@@ -643,7 +643,7 @@ async function main(): Promise<void> {
   );
 
   /* ---- 15. Reissuing a customer link revokes the old one ---- */
-  await step(15, 'Reissuing the customer portal link revokes every earlier link', 'C', async () => {
+  await step(15, 'Reissuing the customer portal link revokes every earlier link', 'approvals', async () => {
     const list = await api('GET', '/quotations?q=Q-1042', { token: tokens[Role.SALES_REP] });
     const q = list.body.data.find((x: any) => x.number === 'Q-1042');
     assert(q, 'Q-1042 not found');
@@ -656,7 +656,7 @@ async function main(): Promise<void> {
       token: tokens[Role.SALES_REP],
       body: { reason: 'Smoke test: reissue the customer link' },
     });
-    expectBuilt(reissue, 'C', 'POST /quotations/:id/portal-link');
+    expectBuilt(reissue, 'approvals', 'POST /quotations/:id/portal-link');
     assert(reissue.status === 200, `reissue failed: ${reissue.body.error?.message}`);
     assert(reissue.body.data.revokedCount >= 1, 'the reissue should have revoked the seeded link');
     assert(
@@ -679,7 +679,7 @@ async function main(): Promise<void> {
   });
 
   /* ---- 16. Every list endpoint searches and pages ---- */
-  await step(16, 'Every list screen searches and pages server-side', 'E', async () => {
+  await step(16, 'Every list screen searches and pages server-side', 'integration', async () => {
     const rep = tokens[Role.SALES_REP];
     const finance = tokens[Role.FINANCE];
     const admin = tokens[Role.ADMIN];
@@ -703,7 +703,7 @@ async function main(): Promise<void> {
 
     for (const list of lists) {
       const res = await api('GET', `${list.path}?page=1&pageSize=3`, { token: list.token });
-      expectBuilt(res, 'E', `GET ${list.path} (paged)`);
+      expectBuilt(res, 'integration', `GET ${list.path} (paged)`);
       assert(res.status === 200, `${list.path} failed: ${res.body.error?.message}`);
       const meta = res.body.meta;
       assert(meta, `${list.path} returned no pagination meta`);
@@ -777,7 +777,7 @@ async function main(): Promise<void> {
     // Fulfillment carries two lists in one payload, so it pages each separately
     // under one shared search term.
     const ful = await api('GET', '/fulfillment?stockPageSize=2&awaitingPageSize=1', { token: rep });
-    expectBuilt(ful, 'E', 'GET /fulfillment (paged)');
+    expectBuilt(ful, 'integration', 'GET /fulfillment (paged)');
     assert(ful.status === 200, `fulfillment failed: ${ful.body.error?.message}`);
     assert(
       ful.body.meta?.stock?.total !== undefined && ful.body.meta?.awaiting?.total !== undefined,
@@ -817,7 +817,7 @@ async function main(): Promise<void> {
   await step(
     17,
     'A hardware product shows and is created with its warehouse stock',
-    'A',
+    'platform',
     async () => {
       const admin = tokens[Role.ADMIN];
       const catalogue = await api('GET', '/products?pageSize=100', { token: admin });
@@ -829,7 +829,7 @@ async function main(): Promise<void> {
       // Read side: the laptop reports the same Main 18 / East 6 the split
       // planner works from, and the catalogue figure reconciles to the sum.
       const stock = await api('GET', `/products/${laptop.id}/stock`, { token: admin });
-      expectBuilt(stock, 'A', 'GET /products/:id/stock');
+      expectBuilt(stock, 'platform', 'GET /products/:id/stock');
       assert(stock.status === 200, `product stock failed: ${stock.body.error?.message}`);
       assert(stock.body.data.stocked === true, 'a hardware product must be stocked');
       const main = stock.body.data.warehouses.find((w: any) => w.warehouseCode === 'MAIN');
@@ -911,7 +911,7 @@ async function main(): Promise<void> {
   await step(
     18,
     "Finance sees only approved-onward quotations and only the approvals that reached Finance",
-    'C',
+    'approvals',
     async () => {
       const finance = tokens[Role.FINANCE];
       const manager = tokens[Role.SALES_MANAGER];
@@ -1005,7 +1005,7 @@ async function main(): Promise<void> {
   await step(
     19,
     'Only an Admin creates accounts, and deactivating one takes effect on the next request',
-    'A',
+    'platform',
     async () => {
       const admin = tokens[Role.ADMIN];
       const rep = tokens[Role.SALES_REP];
@@ -1110,7 +1110,7 @@ async function main(): Promise<void> {
   await step(
     20,
     'An Admin can edit an account, and a new account is asked to set its own password',
-    'A',
+    'platform',
     async () => {
       const admin = tokens[Role.ADMIN];
 
@@ -1239,12 +1239,12 @@ async function main(): Promise<void> {
   const fail = results.filter((r) => r.status === 'FAIL');
 
   log.banner(
-    `Smoke: ${pass} passing · ${pending.length} awaiting an agent · ${fail.length} failing`,
+    `Smoke: ${pass} passing · ${pending.length} not yet built · ${fail.length} failing`,
   );
 
   if (pending.length > 0) {
     console.log('\nStill to build:');
-    for (const p of pending) console.log(`  ⧗ Agent ${p.owner} — step ${p.n}: ${p.title}`);
+    for (const p of pending) console.log(`  ⧗ ${p.domain} — step ${p.n}: ${p.title}`);
   }
   if (fail.length > 0) {
     console.log('\nBroken:');

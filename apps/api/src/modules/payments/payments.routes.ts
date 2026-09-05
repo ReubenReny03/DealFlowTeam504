@@ -4,7 +4,7 @@ import { mountModuleHealth } from '../module.health.js';
 export const paymentsRouter = Router();
 
 mountModuleHealth(paymentsRouter, {
-  module: 'payments', owner: 'D', screens: [13],
+  module: 'payments', domain: 'billing', screens: [13],
   implemented: ['GET /_health', 'POST /invoices/:id/payments (mounted on the invoices router — see invoices.routes.ts)'],
   todo: [],
 });

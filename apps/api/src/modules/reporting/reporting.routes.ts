@@ -27,7 +27,7 @@ export const reportingRouter = Router();
 
 mountModuleHealth(reportingRouter, {
   module: 'reporting',
-  owner: 'D',
+  domain: 'analytics',
   screens: [15],
   implemented: [
     'GET / — KPIs with all four filters (Period, Rep, Approval Status, Product)',

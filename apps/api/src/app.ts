@@ -42,7 +42,7 @@ export function createApp(): Express {
       success: true,
       data: ROUTES.map((r) => ({
         basePath: `${env.apiBasePath}${r.basePath}`,
-        owner: r.owner,
+        domain: r.domain,
         description: r.description,
       })),
       error: null,

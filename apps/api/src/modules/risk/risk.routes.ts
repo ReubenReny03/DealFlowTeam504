@@ -12,7 +12,7 @@ import { mountModuleHealth } from '../module.health.js';
 export const riskRouter = Router();
 
 mountModuleHealth(riskRouter, {
-  module: 'risk', owner: 'B', screens: [4, 6],
+  module: 'risk', domain: 'quotations', screens: [4, 6],
   implemented: ['GET /_health', 'POST /preview'],
   todo: [],
 });

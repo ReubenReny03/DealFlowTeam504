@@ -34,7 +34,7 @@ const DECISION_ROLES: Role[] = [Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE];
 
 mountModuleHealth(approvalsRouter, {
   module: 'approvals',
-  owner: 'C',
+  domain: 'approvals',
   screens: [5, 6],
   implemented: [
     'GET /',

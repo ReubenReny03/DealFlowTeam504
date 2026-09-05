@@ -15,7 +15,7 @@ import { mountReadonly } from '../readonly.factory.js';
 export const negotiationRouter = Router();
 
 mountModuleHealth(negotiationRouter, {
-  module: 'negotiation', owner: 'C', screens: [11],
+  module: 'negotiation', domain: 'portal', screens: [11],
   implemented: ['GET /', 'GET /:id', 'POST /:quotationId/comment', 'POST /:quotationId/counter'],
   todo: [],
 });

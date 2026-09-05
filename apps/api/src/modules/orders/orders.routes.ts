@@ -12,7 +12,7 @@ import { createOrderFromQuotation } from './orders.service.js';
 export const ordersRouter = Router();
 
 mountModuleHealth(ordersRouter, {
-  module: 'orders', owner: 'D', screens: [7, 8, 13],
+  module: 'orders', domain: 'inventory', screens: [7, 8, 13],
   implemented: ['GET /', 'GET /:id', 'POST /from-quotation/:id'],
   todo: [],
 });

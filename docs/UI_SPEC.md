@@ -165,7 +165,7 @@ propose here reaches your account manager immediately."*
 
 # Screens
 
-## Screen 1 — Login / Signup · `/login` · Agent A
+## Screen 1 — Sign in · `/login` · platform
 
 ```
 LoginPage
@@ -189,7 +189,7 @@ quotations."*
 
 ---
 
-## Screen 2 — Sales Dashboard · `/app/dashboard` · Agent B
+## Screen 2 — Sales Dashboard · `/app/dashboard` · quotations
 
 ```
 DashboardPage
@@ -210,7 +210,7 @@ Empty: the `quotations` empty state with **+ New Quotation**.
 
 ---
 
-## Screen 3 — Quotations · `/app/quotations` · Agent B
+## Screen 3 — Quotations · `/app/quotations` · quotations
 
 ```
 QuotationListPage
@@ -228,7 +228,7 @@ Amount · Last activity.
 
 ---
 
-## Screen 4 — Quotation Detail · `/app/quotations/:id` · Agent B
+## Screen 4 — Quotation Detail · `/app/quotations/:id` · quotations
 
 **The most-watched screen in the demo.**
 
@@ -271,7 +271,7 @@ ordinary line-add, so the margin moves immediately. An added line carries a
 
 ---
 
-## Screen 5 — Approvals · `/app/approvals` · Agent C
+## Screen 5 — Approvals · `/app/approvals` · approvals
 
 ```
 ApprovalListPage
@@ -290,7 +290,7 @@ is inside its discount limits."*
 
 ---
 
-## Screen 6 — Approval Detail · `/app/approvals/:id` · Agent C
+## Screen 6 — Approval Detail · `/app/approvals/:id` · approvals
 
 **The money shot.**
 
@@ -341,7 +341,7 @@ approval by itself. Nobody asked for this review."*
 
 ---
 
-## Screen 7 — Fulfillment and Stock · `/app/fulfillment` · Agent D
+## Screen 7 — Fulfillment and Stock · `/app/fulfillment` · inventory
 
 ```
 FulfillmentListPage
@@ -356,7 +356,7 @@ East Depot`), or `—`.
 
 ---
 
-## Screen 8 — Fulfillment Detail · `/app/fulfillment/:id` · Agent D
+## Screen 8 — Fulfillment Detail · `/app/fulfillment/:id` · inventory
 
 ```
 FulfillmentDetailPage
@@ -384,7 +384,7 @@ trail with your reason."*
 
 ---
 
-## Screen 9 — Subscriptions · `/app/subscriptions` · Agent D
+## Screen 9 — Subscriptions · `/app/subscriptions` · billing
 
 Chips: **N Active · N Paused · N Cancelled**. Table: Customer · Plan · Cycle ·
 Next Bill · Amount · Status. `—` when there is no next bill date (paused or
@@ -392,7 +392,7 @@ cancelled). **+ New Plan (Admin)** goes to `/admin/plans`.
 
 ---
 
-## Screen 10 — Billing Detail · `/app/subscriptions/:id` · Agent D
+## Screen 10 — Billing Detail · `/app/subscriptions/:id` · billing
 
 **The screen that proves the hybrid model.**
 
@@ -418,7 +418,7 @@ for the unused days."*
 
 ---
 
-## Screen 11 — Customer Portal · `/portal/q/:number` · Agent C
+## Screen 11 — Customer Portal · `/portal/q/:number` · portal
 
 **A deliberately different surface.** Portal shell, portal guard, portal token.
 
@@ -466,7 +466,7 @@ quotations belonging to your company."*
 
 ---
 
-## Screen 12 — Invoices · `/app/invoices` · Agent D
+## Screen 12 — Invoices · `/app/invoices` · billing
 
 Subtitle: *"Nothing is billed before it ships — a partial delivery produces a
 partial invoice."* Chips: **N Unpaid · N Paid** (+ Overdue when non-zero).
@@ -475,7 +475,7 @@ Due Date.
 
 ---
 
-## Screen 13 — Invoice Detail · `/app/invoices/:id` · Agent D
+## Screen 13 — Invoice Detail · `/app/invoices/:id` · billing
 
 ```
 InvoiceDetailPage
@@ -494,7 +494,7 @@ reference.
 
 ---
 
-## Screen 14 — Deal Health · `/app/deal-health` · Agent D
+## Screen 14 — Deal Health · `/app/deal-health` · analytics
 
 Three tiles — **Stalled Deals · Discount Anomalies · Delivery Slippage** — then a
 table: Deal · Issue · Flagged · Owner · Action.
@@ -508,7 +508,7 @@ Under each row, the alert's full `detail` sentence in small grey text.
 
 ---
 
-## Screen 15 — Reporting · `/app/reports` · Agent D
+## Screen 15 — Reporting · `/app/reports` · analytics
 
 Four filters across the top — **Period · Sales Rep · Approval Status · Product /
 Category** — each re-querying on change. Four KPI tiles: **Quotes Created**,
@@ -518,7 +518,7 @@ average discount. **Export PDF** / **Export XLS**.
 
 ---
 
-## Screen 16 — Product Dashboard · `/admin/products` · Agent A
+## Screen 16 — Product Dashboard · `/admin/products` · catalogue
 
 Three tiles — Total Products ("N active, M archived"), Pricelists ("N tiers, M
 currencies"), Variants ("N SKUs"). Then the table: Product name · Category ·
@@ -534,7 +534,7 @@ asked about warehouses.
 
 ---
 
-## Screen 17 — Product Details · `/admin/products/:id` · Agent A
+## Screen 17 — Product Details · `/admin/products/:id` · catalogue
 
 Four blocks (the last one only for hardware):
 
@@ -565,7 +565,7 @@ exception is creation — see screen 16.
 
 ---
 
-## Screen 19 — Users · `/admin/users` · Agent A
+## Screen 19 — Users · `/admin/users` · platform
 
 **Admin only** — a Sales Manager reaches the rest of the back-end but not this
 tab, and the route guards it as well as hiding it.
@@ -599,7 +599,7 @@ administrator — there is no self-service signup."* See D-034.
 
 ---
 
-## Screen 18 — Discount Tiers & Approvals · `/admin/config` · Agent A
+## Screen 18 — Discount Tiers & Approvals · `/admin/config` · governance
 
 **The screen that proves nothing is hardcoded.**
 

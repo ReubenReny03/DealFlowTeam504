@@ -131,20 +131,20 @@ Shared contract  (A, T+2)
       |         |                                |
       |         +-- Quotation builder  (B, T+10) |
       |                    |                     |
-      |                    +-- Submit -> chain  (B, T+11)  <-- BLOCKS AGENT C
+      |                    +-- Submit -> chain  (quotations)  <-- BLOCKS approvals
       |                              |
       |                              +-- Approval chain  (C, T+14)
       |                                        |
       |                                        +-- Portal + counter + re-approval  (C, T+17)
       |                                                  |
-      |                                                  +-- Confirm -> order  (C->D, T+17)  <-- BLOCKS AGENT D's finale
+      |                                                  +-- Confirm -> order  (portal -> inventory)  <-- BLOCKS fulfillment + billing
       |                                                            |
       |                                                            +-- Split  (D, T+19)
       |                                                            +-- Billing (D, T+19)
       +-- Seed + reset  (A, T+4)  -- everything reads from this
 ```
 
-**Two hard handoffs. Both are Agent B → Agent C and Agent C → Agent D.**
+**Two hard handoffs: quotations → approvals, and portal → inventory.**
 
 - **B's `submit` must land by T+11.** If it slips, C works against seeded
   approval records (they exist) and integrates later. Say so at the T+8
@@ -193,7 +193,8 @@ things that work, you still have a story.
 | **C** — Approvals, Audit, Portal | 10, 11, 12, 13, 14, 19 | 22, 23 | ~16 |
 | **D** — Fulfillment, Billing, Deal Health | 15, 16, 17, 18 | 24, 25, 26, 28, 30, 31 | ~13 |
 
-Agent A carries a third of P0 and blocks everyone. **A must front-load and be
+The platform and catalogue domains carry a third of P0 and everything else
+reads their configuration. **They must land first and be
 done by T+6.** That is why A owns the seed, the reset and the UI kit — the three
 things everyone else consumes.
 

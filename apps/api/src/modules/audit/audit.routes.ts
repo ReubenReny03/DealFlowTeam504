@@ -6,7 +6,7 @@ import { mountReadonly } from '../readonly.factory.js';
 export const auditRouter = Router();
 
 mountModuleHealth(auditRouter, {
-  module: 'audit', owner: 'C', screens: [6],
+  module: 'audit', domain: 'approvals', screens: [6],
   implemented: ['GET /', 'GET /:id'],
   todo: [],
 });

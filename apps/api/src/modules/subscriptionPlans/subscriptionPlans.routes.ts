@@ -21,7 +21,7 @@ import { mountReadonly } from '../readonly.factory.js';
 export const subscriptionPlansRouter = Router();
 
 mountModuleHealth(subscriptionPlansRouter, {
-  module: 'subscriptionPlans', owner: 'A', screens: [9, 17],
+  module: 'subscriptionPlans', domain: 'catalogue', screens: [9, 17],
   implemented: ['GET /', 'GET /:id', 'POST /'],
   todo: [],
 });

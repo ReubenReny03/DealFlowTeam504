@@ -13,7 +13,7 @@ import { mountModuleHealth } from '../module.health.js';
 export const upsellRouter = Router();
 
 mountModuleHealth(upsellRouter, {
-  module: 'upsell', owner: 'B', screens: [4],
+  module: 'upsell', domain: 'quotations', screens: [4],
   implemented: ['GET /suggestions?quotationId='],
   todo: [],
 });

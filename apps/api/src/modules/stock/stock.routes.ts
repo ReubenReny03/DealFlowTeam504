@@ -16,7 +16,7 @@ import { stockAndWarehouseCatalog, toSplitBackorders } from '../fulfillment/fulf
 export const stockRouter = Router();
 
 mountModuleHealth(stockRouter, {
-  module: 'stock', owner: 'D', screens: [7],
+  module: 'stock', domain: 'inventory', screens: [7],
   implemented: ['GET /', 'GET /:id', 'POST /adjust'],
   todo: [],
 });

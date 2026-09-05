@@ -95,7 +95,7 @@ Two endpoints carry two lists in one payload and so page each independently:
 
 ---
 
-## Health — Agent A
+## Health — platform
 
 | M   | Path                | Auth | Status |
 | --- | ------------------- | ---- | ------ |
@@ -118,7 +118,7 @@ Two endpoints carry two lists in one payload and so page each independently:
 
 ---
 
-## Auth — Agent A · screen 1
+## Auth — platform · screen 1
 
 | M    | Path                  | Auth | Request         | Response           | Status |
 | ---- | --------------------- | ---- | --------------- | ------------------ | ------ |
@@ -182,7 +182,7 @@ authenticated request.
 
 ---
 
-## Configuration — Agent A · screen 18
+## Configuration — governance · screen 18
 
 | M   | Path                                       | Auth                 | Request                       | Response                                  | Status |
 | --- | ------------------------------------------ | -------------------- | ----------------------------- | ----------------------------------------- | ------ |
@@ -230,7 +230,7 @@ Errors: `400` if `reason` is missing · `404` if governance has never been saved
 
 ---
 
-## Catalogue and configuration data — Agent A
+## Catalogue and accounts — catalogue & platform
 
 | M          | Path                              | Auth  | Response                | Status |
 | ---------- | --------------------------------- | ----- | ----------------------- | ------ |
@@ -297,7 +297,7 @@ cannot disagree on day one.
 
 ---
 
-## Quotations — Agent B · screens 2, 3, 4
+## Quotations — quotations · screens 2, 3, 4
 
 | M     | Path                          | Auth            | Request                    | Response                    | Status |
 | ----- | ----------------------------- | --------------- | -------------------------- | --------------------------- | ------ |
@@ -404,7 +404,7 @@ When risk is 0: `autoApproved: true`, `approval: null`, stage `APPROVED`.
 
 ---
 
-## Pricing, risk and upsell — Agent B
+## Pricing, risk and upsell — quotations
 
 | M    | Path                               | Auth | Request                 | Response                | Status |
 | ---- | ---------------------------------- | ---- | ----------------------- | ----------------------- | ------ |
@@ -434,16 +434,16 @@ When risk is 0: `autoApproved: true`, `approval: null`, stage `APPROVED`.
 
 ---
 
-## Approvals and audit — Agent C · screens 5, 6
+## Approvals and audit — approvals · screens 5, 6
 
 | M    | Path                                | Auth                 | Request             | Response            | Status |
 | ---- | ----------------------------------- | -------------------- | ------------------- | ------------------- | ------ |
 | GET  | `/approvals`                        | MGR, FIN, ADMIN, REP | `ApprovalListQuery` | `ApprovalListDto`   | ✅     |
 | GET  | `/approvals/:id`                    | MGR, FIN, ADMIN, REP | —                   | `ApprovalDto`       | ✅     |
 | GET  | `/approvals/:id/trail`              | MGR, FIN, ADMIN, REP | —                   | `{trail, auditLog}` | ✅     |
-| POST | `/approvals/:id/approve`            | MGR, FIN             | `{reason}`          | `ApprovalDto`       | 🔨 C   |
-| POST | `/approvals/:id/return`             | MGR, FIN             | `{reason}`          | `ApprovalDto`       | 🔨 C   |
-| POST | `/approvals/:id/reject`             | MGR, FIN             | `{reason}`          | `ApprovalDto`       | 🔨 C   |
+| POST | `/approvals/:id/approve`            | MGR, FIN             | `{reason}`          | `ApprovalDto`       | 🔨   |
+| POST | `/approvals/:id/return`             | MGR, FIN             | `{reason}`          | `ApprovalDto`       | 🔨   |
+| POST | `/approvals/:id/reject`             | MGR, FIN             | `{reason}`          | `ApprovalDto`       | 🔨   |
 | GET  | `/audit?entity=&entityId=&actorId=` | any                  | —                   | `AuditLogDto[]`     | ✅     |
 
 **Role scoping (read side).** `GET /approvals` shows FINANCE only the approvals
@@ -470,7 +470,7 @@ if the approval is already decided.
 
 ---
 
-## Portal and negotiation — Agent C · screen 11
+## Portal and negotiation — portal · screen 11
 
 **A separate surface with a separate credential.** An internal JWT is refused.
 
@@ -479,9 +479,9 @@ if the approval is already decided.
 | GET  | `/portal/quotations`         | portal token or CUSTOMER | `?q=&page=&pageSize=`  | `PortalQuotationListResponse` | ✅     |
 | GET  | `/portal/q/:number`          | portal token or CUSTOMER | —                      | `PortalResolveResponse` | ✅     |
 | GET  | `/portal/q/:number/messages` | portal token or CUSTOMER | —                      | `NegotiationEventDto[]` | ✅     |
-| POST | `/portal/q/:number/comment`  | portal token or CUSTOMER | `PortalCommentRequest` | `NegotiationEventDto`   | 🔨 C   |
-| POST | `/portal/q/:number/counter`  | portal token or CUSTOMER | `PortalCounterRequest` | `PortalCounterResponse` | 🔨 C   |
-| POST | `/portal/q/:number/confirm`  | portal token or CUSTOMER | —                      | `PortalConfirmResponse` | 🔨 C   |
+| POST | `/portal/q/:number/comment`  | portal token or CUSTOMER | `PortalCommentRequest` | `NegotiationEventDto`   | 🔨   |
+| POST | `/portal/q/:number/counter`  | portal token or CUSTOMER | `PortalCounterRequest` | `PortalCounterResponse` | 🔨   |
+| POST | `/portal/q/:number/confirm`  | portal token or CUSTOMER | —                      | `PortalConfirmResponse` | 🔨   |
 
 `GET /portal/quotations` — **one customer, many quotations.**
 
@@ -568,21 +568,21 @@ returns `reEnteredApproval: true` with a null order.
 
 ---
 
-## Fulfillment and stock — Agent D · screens 7, 8
+## Fulfillment and stock — inventory · screens 7, 8
 
 | M    | Path                             | Auth            | Request                      | Response                   | Status |
 | ---- | -------------------------------- | --------------- | ---------------------------- | -------------------------- | ------ |
 | GET  | `/fulfillment`                   | internal        | —                            | `FulfillmentListDto`       | ✅     |
 | GET  | `/fulfillment/:id`               | internal        | —                            | `FulfillmentDto`           | ✅     |
-| POST | `/fulfillment/plan/:orderId`     | internal        | —                            | `FulfillmentDto`           | 🔨 D   |
-| POST | `/fulfillment/:id/accept`        | internal        | —                            | `AcceptSplitResponse`      | 🔨 D   |
-| POST | `/fulfillment/:id/override`      | MGR, FIN, ADMIN | `ManualSplitOverrideRequest` | `FulfillmentDto`           | 🔨 D   |
-| POST | `/fulfillment/:id/ship`          | internal        | `{warehouseId}`              | `FulfillmentDto`           | 🔨 D   |
-| GET  | `/fulfillment/:id/consolidation` | internal        | —                            | `{available, coveredBy[]}` | 🔨 D   |
+| POST | `/fulfillment/plan/:orderId`     | internal        | —                            | `FulfillmentDto`           | 🔨   |
+| POST | `/fulfillment/:id/accept`        | internal        | —                            | `AcceptSplitResponse`      | 🔨   |
+| POST | `/fulfillment/:id/override`      | MGR, FIN, ADMIN | `ManualSplitOverrideRequest` | `FulfillmentDto`           | 🔨   |
+| POST | `/fulfillment/:id/ship`          | internal        | `{warehouseId}`              | `FulfillmentDto`           | 🔨   |
+| GET  | `/fulfillment/:id/consolidation` | internal        | —                            | `{available, coveredBy[]}` | 🔨   |
 | GET  | `/stock`                         | internal        | `?warehouseId=&productId=`   | `StockDto[]`               | ✅     |
-| POST | `/stock/adjust`                  | ADMIN, FIN      | `AdjustStockRequest`         | `StockDto`                 | 🔨 D   |
+| POST | `/stock/adjust`                  | ADMIN, FIN      | `AdjustStockRequest`         | `StockDto`                 | 🔨   |
 | GET  | `/orders` · `/orders/:id`        | internal        | —                            | `OrderDto`                 | ✅     |
-| POST | `/orders/from-quotation/:id`     | internal        | —                            | `OrderDto`                 | 🔨 D   |
+| POST | `/orders/from-quotation/:id`     | internal        | —                            | `OrderDto`                 | 🔨   |
 
 `FulfillmentDto` always carries a non-empty `rationale`:
 
@@ -628,21 +628,21 @@ backorder to `CONSOLIDATION_AVAILABLE`, which is what raises screen 8's banner.
 
 ---
 
-## Billing — Agent D · screens 9, 10, 12, 13
+## Billing — billing · screens 9, 10, 12, 13
 
 | M    | Path                          | Auth            | Request                     | Response                            | Status |
 | ---- | ----------------------------- | --------------- | --------------------------- | ----------------------------------- | ------ |
 | GET  | `/subscriptions`              | internal        | `?status=&customerId=`      | `SubscriptionListDto`               | ✅     |
 | GET  | `/subscriptions/:id`          | internal        | —                           | `SubscriptionDto`                   | ✅     |
-| POST | `/subscriptions/:id/modify`   | MGR, FIN        | `ModifySubscriptionRequest` | `ModifySubscriptionResponse`        | 🔨 D   |
-| POST | `/subscriptions/:id/cancel`   | MGR, FIN        | `CancelSubscriptionRequest` | `CancelSubscriptionResponse`        | 🔨 D   |
+| POST | `/subscriptions/:id/modify`   | MGR, FIN        | `ModifySubscriptionRequest` | `ModifySubscriptionResponse`        | 🔨   |
+| POST | `/subscriptions/:id/cancel`   | MGR, FIN        | `CancelSubscriptionRequest` | `CancelSubscriptionResponse`        | 🔨   |
 | GET  | `/billing/subscription/:id`   | internal        | —                           | `BillingDetailDto`                  | ✅     |
-| POST | `/billing/run-schedule`       | FIN, ADMIN      | —                           | `InvoiceDto[]`                      | 🔨 D   |
+| POST | `/billing/run-schedule`       | FIN, ADMIN      | —                           | `InvoiceDto[]`                      | 🔨   |
 | GET  | `/invoices`                   | internal        | `?status=&customerId=`      | `InvoiceListDto`                    | ✅     |
 | GET  | `/invoices/:id`               | internal        | —                           | `{invoice, order, relatedInvoices}` | ✅     |
-| POST | `/invoices/generate/:orderId` | FIN, ADMIN      | —                           | `InvoiceDto`                        | 🔨 D   |
-| POST | `/invoices/:id/payments`      | MGR, FIN, ADMIN | `RecordPaymentRequest`      | `InvoiceDto`                        | 🔨 D   |
-| GET  | `/invoices/:id/summary.csv`   | internal        | —                           | `text/csv`                          | 🔨 D   |
+| POST | `/invoices/generate/:orderId` | FIN, ADMIN      | —                           | `InvoiceDto`                        | 🔨   |
+| POST | `/invoices/:id/payments`      | MGR, FIN, ADMIN | `RecordPaymentRequest`      | `InvoiceDto`                        | 🔨   |
+| GET  | `/invoices/:id/summary.csv`   | internal        | —                           | `text/csv`                          | 🔨   |
 
 `POST /subscriptions/:id/modify`
 
@@ -674,14 +674,14 @@ qtyInvoiced` on the non-subscription lines. Recurring lines are never on it.
 
 ---
 
-## Deal health and reporting — Agent D · screens 14, 15
+## Deal health and reporting — analytics · screens 14, 15
 
 | M     | Path                              | Auth            | Request                  | Response                          | Status |
 | ----- | --------------------------------- | --------------- | ------------------------ | --------------------------------- | ------ |
 | GET   | `/deal-health`                    | internal        | `?type=&status=`         | `DealHealthDashboardDto`          | ✅     |
-| POST  | `/deal-health/evaluate`           | MGR, ADMIN      | —                        | `DealAlertDto[]`                  | 🔨 D   |
-| POST  | `/deal-health/:id/nudge`          | MGR, ADMIN, REP | `{note?}`                | `AlertActionResponse`             | 🔨 D   |
-| POST  | `/deal-health/:id/escalate`       | MGR, ADMIN      | `{note?}`                | `AlertActionResponse`             | 🔨 D   |
+| POST  | `/deal-health/evaluate`           | MGR, ADMIN      | —                        | `DealAlertDto[]`                  | 🔨   |
+| POST  | `/deal-health/:id/nudge`          | MGR, ADMIN, REP | `{note?}`                | `AlertActionResponse`             | 🔨   |
+| POST  | `/deal-health/:id/escalate`       | MGR, ADMIN      | `{note?}`                | `AlertActionResponse`             | 🔨   |
 | GET   | `/reporting`                      | ADMIN, MGR, FIN | `ReportingQuery`         | `ReportingDashboardDto`           | ✅     |
 | GET   | `/reporting/export.csv`           | ADMIN, MGR, FIN | `ReportingQuery`         | `text/csv`                        | ✅     |
 | GET   | `/reporting/export.pdf` · `.xlsx` | ADMIN, MGR, FIN | `ReportingQuery`         | `application/pdf` · xlsx          | ✅     |
