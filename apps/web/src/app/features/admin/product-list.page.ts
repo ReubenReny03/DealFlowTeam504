@@ -7,10 +7,11 @@ import {
   type ProductDashboardDto, type ProductDto, type UpsertProductRequest,
 } from '@dealflow/shared';
 import { ApiService } from '../../core/api/api.service';
+import { ListQuery } from '../../core/state/list-query';
 import { ToastStore } from '../../core/state/toast.store';
 import {
   EmptyStateComponent, ErrorStateComponent, KpiTileComponent, LoadingComponent, ModalComponent, MoneyPipe,
-  StatusChipComponent,
+  PaginatorComponent, SearchBoxComponent, StatusChipComponent,
 } from '../../shared/ui';
 
 /** Screen 16 — Product Dashboard. */
@@ -19,7 +20,7 @@ import {
   standalone: true,
   imports: [
     FormsModule, KpiTileComponent, MoneyPipe, StatusChipComponent, LoadingComponent, ErrorStateComponent,
-    EmptyStateComponent, ModalComponent,
+    EmptyStateComponent, ModalComponent, PaginatorComponent, SearchBoxComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -28,7 +29,13 @@ import {
         <h1 class="df-h1">Products</h1>
         <p class="df-muted mt-1">The catalogue a rep quotes from. A product needs a price and a tax rate before it can be sold.</p>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <df-search-box
+          [value]="query.q()"
+          placeholder="Search name, SKU or description"
+          width="18rem"
+          (search)="search($event)"
+        />
         <button type="button" class="df-btn-primary" (click)="newProduct()">+ New Product</button>
         <button type="button" class="df-btn-ghost" (click)="managePriceFields()">Manage Price Fields</button>
       </div>
@@ -76,8 +83,25 @@ import {
             </tbody>
           </table>
         </div>
+        <df-paginator
+          [page]="query.page()"
+          [pageSize]="query.pageSize()"
+          [total]="query.total()"
+          (go)="goToPage($event)"
+        />
       } @else {
-        <div class="mt-6"><df-empty-state icon="📦" [title]="empty.title" [body]="empty.body" [cta]="empty.cta ?? null" (action)="newProduct()" /></div>
+        <div class="mt-6">
+          <df-empty-state
+            icon="📦"
+            [title]="empty.title"
+            [body]="empty.body"
+            [cta]="empty.cta ?? null"
+            [filtered]="query.isFiltered()"
+            [searchTerm]="query.q()"
+            (action)="newProduct()"
+            (clearSearch)="search('')"
+          />
+        </div>
       }
       }
     }
@@ -153,6 +177,8 @@ export class ProductListPage implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly data = signal<ProductDashboardDto | null>(null);
   protected readonly empty = EMPTY_STATES['products'];
+  /** The tiles count the whole catalogue; this pages and searches the table under them. */
+  protected readonly query = new ListQuery(25);
   protected readonly categoryLabel = CATEGORY_LABEL;
   protected readonly cycleLabel = CYCLE_LABEL;
   protected readonly categories = Object.values(ProductCategory);
@@ -168,12 +194,24 @@ export class ProductListPage implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     try {
-      this.data.set(await firstValueFrom(this.api.get<ProductDashboardDto>('/products/dashboard')));
+      const { data, meta } = await firstValueFrom(
+        this.api.getWithMeta<ProductDashboardDto>('/products/dashboard', this.query.params()),
+      );
+      this.data.set(data);
+      this.query.applyMeta(meta, data.products.length);
     } catch (err: any) {
       this.error.set(err?.error?.error?.message ?? 'Could not load the catalogue.');
     } finally {
       this.loading.set(false);
     }
+  }
+
+  search(term: string): void {
+    if (this.query.setSearch(term)) void this.load();
+  }
+
+  goToPage(page: number): void {
+    if (this.query.goToPage(page)) void this.load();
   }
 
   variantCount(p: ProductDto): string {

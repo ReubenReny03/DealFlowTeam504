@@ -18,7 +18,8 @@ import { requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { invalidState, notFound } from '../../utils/apiError.js';
-import { ok, paginate } from '../../utils/respond.js';
+import { listParams, pageMeta, searchFilter, stableSort } from '../../utils/listQuery.js';
+import { ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
 import { mountModuleHealth } from '../module.health.js';
@@ -46,16 +47,16 @@ subscriptionsRouter.get(
   '/',
   requireAuth(FINANCE_VIEW),
   asyncHandler(async (req, res) => {
-    const page = Math.max(1, Number(req.query.page ?? 1));
-    const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize ?? 50)));
+    const params = listParams(req.query);
     const filter: Record<string, unknown> = {};
     if (req.query.status) filter.status = req.query.status;
     if (req.query.customerId) filter.customerId = req.query.customerId;
+    Object.assign(filter, searchFilter(params.q, ['number', 'customerName', 'planName']) ?? {});
     const [items, total, active, paused, cancelled] = await Promise.all([
       Subscription.find(filter)
-        .sort({ nextBillDate: 1, customerName: 1 })
-        .skip((page - 1) * pageSize)
-        .limit(pageSize)
+        .sort(stableSort({ nextBillDate: 1, customerName: 1 }))
+        .skip(params.skip)
+        .limit(params.pageSize)
         .lean(),
       Subscription.countDocuments(filter),
       Subscription.countDocuments({ status: SubscriptionStatus.ACTIVE }),
@@ -66,7 +67,7 @@ subscriptionsRouter.get(
       counts: { active, paused, cancelled },
       items: toDtoList(items),
     };
-    ok(res, payload, paginate([], page, pageSize, total));
+    ok(res, payload, pageMeta(params, total));
   }),
 );
 

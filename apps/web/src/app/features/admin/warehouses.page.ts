@@ -3,14 +3,21 @@ import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { EMPTY_STATES, money, toMajor, type UpsertWarehouseRequest, type WarehouseDto } from '@dealflow/shared';
 import { ApiService } from '../../core/api/api.service';
+import { ListQuery } from '../../core/state/list-query';
 import { ToastStore } from '../../core/state/toast.store';
-import { EmptyStateComponent, ErrorStateComponent, LoadingComponent, ModalComponent, MoneyPipe } from '../../shared/ui';
+import {
+  EmptyStateComponent, ErrorStateComponent, LoadingComponent, ModalComponent, MoneyPipe,
+  PaginatorComponent, SearchBoxComponent,
+} from '../../shared/ui';
 
 /** Warehouse setup: the numbers the split planner actually ranks on. */
 @Component({
   selector: 'df-warehouses',
   standalone: true,
-  imports: [FormsModule, LoadingComponent, ErrorStateComponent, EmptyStateComponent, ModalComponent, MoneyPipe],
+  imports: [
+    FormsModule, LoadingComponent, ErrorStateComponent, EmptyStateComponent, ModalComponent, MoneyPipe,
+    PaginatorComponent, SearchBoxComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -18,13 +25,26 @@ import { EmptyStateComponent, ErrorStateComponent, LoadingComponent, ModalCompon
         <h1 class="df-h1">Warehouses</h1>
         <p class="df-muted mt-1">The split planner prefers the lowest shipping cost weight, and estimates cost as base + per-unit × quantity.</p>
       </div>
-      <button type="button" class="df-btn-primary" (click)="create()">+ New Warehouse</button>
+      <div class="flex flex-wrap items-center gap-2">
+        <df-search-box [value]="query.q()" placeholder="Search name or code" (search)="search($event)" />
+        <button type="button" class="df-btn-primary" (click)="create()">+ New Warehouse</button>
+      </div>
     </div>
 
     @if (loading()) { <div class="mt-6"><df-loading [count]="2" label="Loading warehouses" /></div> }
     @else if (error()) { <div class="mt-6"><df-error-state [message]="error()!" (retry)="load()" /></div> }
     @else if (!warehouses().length) {
-      <div class="mt-6"><df-empty-state [title]="empty.title" [body]="empty.body" [cta]="empty.cta ?? null" (action)="create()" /></div>
+      <div class="mt-6">
+        <df-empty-state
+          [title]="empty.title"
+          [body]="empty.body"
+          [cta]="empty.cta ?? null"
+          [filtered]="query.isFiltered()"
+          [searchTerm]="query.q()"
+          (action)="create()"
+          (clearSearch)="search('')"
+        />
+      </div>
     }
     @else {
       <div class="df-card df-scroll-x mt-6">
@@ -55,6 +75,12 @@ import { EmptyStateComponent, ErrorStateComponent, LoadingComponent, ModalCompon
           </tbody>
         </table>
       </div>
+      <df-paginator
+        [page]="query.page()"
+        [pageSize]="query.pageSize()"
+        [total]="query.total()"
+        (go)="goToPage($event)"
+      />
       <p class="mt-3 text-xs leading-relaxed text-slate-400">
         A new warehouse takes part in the split planner as soon as it holds stock. Lead time is what a backorder ETA is estimated from.
       </p>
@@ -118,6 +144,7 @@ export class WarehousesPage implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly warehouses = signal<WarehouseDto[]>([]);
   protected readonly empty = EMPTY_STATES['warehouses'];
+  protected readonly query = new ListQuery(25);
 
   protected readonly formOpen = signal(false);
   protected readonly editingId = signal<string | null>(null);
@@ -128,9 +155,23 @@ export class WarehousesPage implements OnInit {
   ngOnInit(): void { void this.load(); }
   async load(): Promise<void> {
     this.loading.set(true); this.error.set(null);
-    try { this.warehouses.set(await firstValueFrom(this.api.get<WarehouseDto[]>('/warehouses'))); }
+    try {
+      const { data, meta } = await firstValueFrom(
+        this.api.getWithMeta<WarehouseDto[]>('/warehouses', this.query.params()),
+      );
+      this.warehouses.set(data);
+      this.query.applyMeta(meta, data.length);
+    }
     catch (err: any) { this.error.set(err?.error?.error?.message ?? 'Could not load warehouses.'); }
     finally { this.loading.set(false); }
+  }
+
+  search(term: string): void {
+    if (this.query.setSearch(term)) void this.load();
+  }
+
+  goToPage(page: number): void {
+    if (this.query.goToPage(page)) void this.load();
   }
 
   create(): void {

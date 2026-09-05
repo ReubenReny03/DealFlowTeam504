@@ -3,23 +3,43 @@ import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { Currency, EMPTY_STATES, PriceRuleType, type PriceListDto, type UpdatePriceListRequest } from '@dealflow/shared';
 import { ApiService } from '../../core/api/api.service';
+import { ListQuery } from '../../core/state/list-query';
 import { ToastStore } from '../../core/state/toast.store';
-import { EmptyStateComponent, ErrorStateComponent, LoadingComponent, ModalComponent } from '../../shared/ui';
+import {
+  EmptyStateComponent, ErrorStateComponent, LoadingComponent, ModalComponent, PaginatorComponent,
+  SearchBoxComponent,
+} from '../../shared/ui';
 
 /** Tier price lists (the pricing half of screen 17's Pricelists block). */
 @Component({
   selector: 'df-pricelists',
   standalone: true,
-  imports: [FormsModule, LoadingComponent, ErrorStateComponent, EmptyStateComponent, ModalComponent],
+  imports: [
+    FormsModule, LoadingComponent, ErrorStateComponent, EmptyStateComponent, ModalComponent,
+    PaginatorComponent, SearchBoxComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <h1 class="df-h1">Price Lists</h1>
-    <p class="df-muted mt-1">What each tier actually pays. Separate from the discount ceilings, which govern how much more can be given away.</p>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 class="df-h1">Price Lists</h1>
+        <p class="df-muted mt-1">What each tier actually pays. Separate from the discount ceilings, which govern how much more can be given away.</p>
+      </div>
+      <df-search-box [value]="query.q()" placeholder="Search price list" (search)="search($event)" />
+    </div>
 
     @if (loading()) { <div class="mt-6"><df-loading [count]="3" label="Loading price lists" /></div> }
     @else if (error()) { <div class="mt-6"><df-error-state [message]="error()!" (retry)="load()" /></div> }
     @else if (!lists().length) {
-      <div class="mt-6"><df-empty-state [title]="empty.title" [body]="empty.body" /></div>
+      <div class="mt-6">
+        <df-empty-state
+          [title]="empty.title"
+          [body]="empty.body"
+          [filtered]="query.isFiltered()"
+          [searchTerm]="query.q()"
+          (clearSearch)="search('')"
+        />
+      </div>
     }
     @else {
       <div class="df-card df-scroll-x mt-6">
@@ -45,6 +65,12 @@ import { EmptyStateComponent, ErrorStateComponent, LoadingComponent, ModalCompon
           </tbody>
         </table>
       </div>
+      <df-paginator
+        [page]="query.page()"
+        [pageSize]="query.pageSize()"
+        [total]="query.total()"
+        (go)="goToPage($event)"
+      />
       <p class="mt-3 text-xs leading-relaxed text-slate-400">
         Changing a rule changes what that tier pays on every line priced from here on — it does not change the tier's discount ceiling.
       </p>
@@ -108,6 +134,7 @@ export class PriceListsPage implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly lists = signal<PriceListDto[]>([]);
   protected readonly empty = EMPTY_STATES['pricelists'];
+  protected readonly query = new ListQuery(25);
 
   protected readonly editingList = signal<PriceListDto | null>(null);
   protected readonly saving = signal(false);
@@ -121,9 +148,23 @@ export class PriceListsPage implements OnInit {
   ngOnInit(): void { void this.load(); }
   async load(): Promise<void> {
     this.loading.set(true); this.error.set(null);
-    try { this.lists.set(await firstValueFrom(this.api.get<PriceListDto[]>('/pricelists'))); }
+    try {
+      const { data, meta } = await firstValueFrom(
+        this.api.getWithMeta<PriceListDto[]>('/pricelists', this.query.params()),
+      );
+      this.lists.set(data);
+      this.query.applyMeta(meta, data.length);
+    }
     catch (err: any) { this.error.set(err?.error?.error?.message ?? 'Could not load price lists.'); }
     finally { this.loading.set(false); }
+  }
+
+  search(term: string): void {
+    if (this.query.setSearch(term)) void this.load();
+  }
+
+  goToPage(page: number): void {
+    if (this.query.goToPage(page)) void this.load();
   }
 
   edit(pl: PriceListDto): void {

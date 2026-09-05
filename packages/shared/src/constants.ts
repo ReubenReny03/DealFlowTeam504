@@ -269,6 +269,18 @@ export const EMPTY_STATES: Record<string, { title: string; body: string; cta?: s
   },
 };
 
+/**
+ * Shown when a SEARCH returns nothing — never the same words as an empty
+ * collection. "You have no invoices" and "nothing matches 'acme'" are different
+ * facts, and telling a user the first when the second is true sends them
+ * looking for a bug that is not there.
+ */
+export const NO_MATCHES = {
+  title: 'No matches',
+  body: 'Nothing here matches that search. Try a different term, or clear the search to see everything again.',
+  cta: 'Clear search',
+};
+
 /** The 18 screens, so docs, routing and the screen-to-journey map cannot drift. */
 export const SCREEN_REGISTRY: {
   id: number;

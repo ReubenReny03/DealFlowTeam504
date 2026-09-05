@@ -16,6 +16,7 @@ import { validate } from '../../middleware/validate.js';
 import { withTransaction } from '../../db/connection.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { badRequest, insufficientStock, invalidState, notFound } from '../../utils/apiError.js';
+import { listParams, pageMeta, searchRegex, stableSort } from '../../utils/listQuery.js';
 import { ok } from '../../utils/respond.js';
 import { toDto } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
@@ -37,19 +38,50 @@ mountModuleHealth(fulfillmentRouter, {
 const OPS: Role[] = [Role.ADMIN, Role.FINANCE, Role.SALES_MANAGER, Role.SALES_REP];
 const WRITE: Role[] = [Role.ADMIN, Role.FINANCE, Role.SALES_MANAGER];
 
-/** Screen 7: live stock per warehouse, plus everything awaiting fulfillment. */
+/**
+ * Screen 7: live stock per warehouse, plus everything awaiting fulfillment.
+ *
+ * Two independent lists in one payload, so each gets its own page cursor —
+ * `?stockPage=` and `?awaitingPage=` — while a single `?q=` narrows both. Stock
+ * carries no denormalised names, so a search on it resolves matching warehouses
+ * and products first and filters by their ids.
+ */
 fulfillmentRouter.get(
   '/',
   requireAuth(OPS),
-  asyncHandler(async (_req, res) => {
-    const [stock, warehouses, products, fulfillments] = await Promise.all([
-      Stock.find().lean(),
+  asyncHandler(async (req, res) => {
+    const stockParams = listParams(req.query, { prefix: 'stock', defaultPageSize: 25 });
+    const awaitingParams = listParams(req.query, { prefix: 'awaiting', defaultPageSize: 25 });
+    const q = stockParams.q ?? awaitingParams.q ?? (typeof req.query.q === 'string' ? req.query.q.trim() || undefined : undefined);
+
+    const [warehouses, products] = await Promise.all([
       Warehouse.find().lean(),
-      Product.find().select('name').lean(),
-      Fulfillment.find({ status: { $nin: ['SHIPPED', 'CANCELLED'] } }).sort({ createdAt: -1 }).lean(),
+      Product.find().select('name sku').lean(),
     ]);
     const warehouseName = new Map((warehouses as any[]).map((w) => [String(w._id), w.name]));
     const productName = new Map((products as any[]).map((p) => [String(p._id), p.name]));
+
+    const stockFilter: Record<string, unknown> = {};
+    if (q) {
+      const term = searchRegex(q);
+      const rx = new RegExp(term.$regex, term.$options);
+      stockFilter.$or = [
+        { warehouseId: { $in: (warehouses as any[]).filter((w) => rx.test(w.name) || rx.test(w.code ?? '')).map((w) => w._id) } },
+        { productId: { $in: (products as any[]).filter((p) => rx.test(p.name) || rx.test(p.sku ?? '')).map((p) => p._id) } },
+      ];
+    }
+    const awaitingFilter: Record<string, unknown> = { status: { $nin: ['SHIPPED', 'CANCELLED'] } };
+    if (q) {
+      const term = searchRegex(q);
+      awaitingFilter.$or = [{ orderNumber: term }, { customerName: term }];
+    }
+
+    const [stock, stockTotal, fulfillments, awaitingTotal] = await Promise.all([
+      Stock.find(stockFilter).sort(stableSort({ warehouseId: 1 })).skip(stockParams.skip).limit(stockParams.pageSize).lean(),
+      Stock.countDocuments(stockFilter),
+      Fulfillment.find(awaitingFilter).sort(stableSort({ createdAt: -1 })).skip(awaitingParams.skip).limit(awaitingParams.pageSize).lean(),
+      Fulfillment.countDocuments(awaitingFilter),
+    ]);
 
     const payload: FulfillmentListDto = {
       stock: (stock as any[]).map((s) => ({
@@ -66,7 +98,11 @@ fulfillmentRouter.get(
         fulfillmentId: String(f._id),
       })),
     };
-    ok(res, payload);
+    ok(res, payload, {
+      q,
+      stock: pageMeta(stockParams, stockTotal),
+      awaiting: pageMeta(awaitingParams, awaitingTotal),
+    });
   }),
 );
 

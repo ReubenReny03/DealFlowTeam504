@@ -12,7 +12,8 @@ import type { Role } from '@dealflow/shared';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { notFound } from '../utils/apiError.js';
-import { ok, paginate } from '../utils/respond.js';
+import { listParams, pageMeta, searchFilter, stableSort } from '../utils/listQuery.js';
+import { ok } from '../utils/respond.js';
 import { toDto, toDtoList } from '../utils/serialize.js';
 
 export interface ReadonlyOptions {
@@ -39,24 +40,20 @@ export function mountReadonly(router: Router, options: ReadonlyOptions): Router 
     '/',
     requireAuth(roles),
     asyncHandler(async (req, res) => {
-      const page = Math.max(1, Number(req.query.page ?? 1));
-      const pageSize = Math.min(500, Math.max(1, Number(req.query.pageSize ?? defaultPageSize)));
+      const params = listParams(req.query, { defaultPageSize, maxPageSize: 500 });
       const filter: Record<string, unknown> = { ...(scope?.(req) ?? {}) };
 
       for (const field of filterFields) {
         const value = req.query[field];
         if (value !== undefined && value !== '') filter[field] = value;
       }
-      const q = req.query.q as string | undefined;
-      if (q && searchFields.length > 0) {
-        filter.$or = searchFields.map((f) => ({ [f]: { $regex: q, $options: 'i' } }));
-      }
+      Object.assign(filter, searchFilter(params.q, searchFields) ?? {});
 
       const [items, total] = await Promise.all([
-        model.find(filter).sort(sort).skip((page - 1) * pageSize).limit(pageSize).lean(),
+        model.find(filter).sort(stableSort(sort)).skip(params.skip).limit(params.pageSize).lean(),
         model.countDocuments(filter),
       ]);
-      ok(res, toDtoList(items), paginate([], page, pageSize, total));
+      ok(res, toDtoList(items), pageMeta(params, total));
     }),
   );
 

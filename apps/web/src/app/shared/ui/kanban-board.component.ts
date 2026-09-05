@@ -18,7 +18,7 @@ import { StatusChipComponent } from './status-chip.component';
             <header class="mb-2 flex items-baseline justify-between px-1">
               <h3 class="text-sm font-semibold text-slate-700">
                 {{ column.label }}
-                <span class="ml-1.5 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">{{ column.cards.length }}</span>
+                <span class="ml-1.5 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">{{ column.cardCount }}</span>
               </h3>
               <span class="text-xs text-slate-500">{{ column.total | money }}</span>
             </header>
@@ -44,6 +44,13 @@ import { StatusChipComponent } from './status-chip.component';
                 </button>
               } @empty {
                 <p class="px-2 py-6 text-center text-xs text-slate-400">Nothing at this stage.</p>
+              }
+              <!-- The column is capped so it stays scannable; say so rather than
+                   quietly showing a subset. -->
+              @if (column.cardCount > column.cards.length) {
+                <p class="px-2 py-2 text-center text-[11px] text-slate-500">
+                  Showing {{ column.cards.length }} of {{ column.cardCount }} — search or switch to Table view for the rest.
+                </p>
               }
             </div>
           </section>

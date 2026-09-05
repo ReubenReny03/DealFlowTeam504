@@ -25,6 +25,7 @@ import type {
   SubscriptionListDto,
 } from '@dealflow/shared';
 import { ApiService } from './api-token';
+import { ListQuery } from './list-query';
 
 /** Small helper so every store gets identical loading/error handling. */
 function loader<T>(fn: () => Promise<T>) {
@@ -54,10 +55,8 @@ export class ApprovalStore {
   readonly current = signal<ApprovalDto | null>(null);
   readonly pendingOnly = signal(false);
 
-  readonly page = signal(1);
-  readonly pageSize = signal(50);
-  readonly total = signal(0);
-  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize())));
+  /** Search + pagination, shared shape across every list screen. */
+  readonly query = new ListQuery(25);
 
   readonly counts = computed(
     () => this.list()?.counts ?? { pending: 0, returned: 0, approved: 0, rejected: 0 },
@@ -69,14 +68,13 @@ export class ApprovalStore {
     this.error.set(null);
     try {
       const { data, meta } = await firstValueFrom(
-        this.api.getWithMeta<ApprovalListDto>('/approvals', {
-          pendingOnly: this.pendingOnly() || undefined,
-          page: this.page(),
-          pageSize: this.pageSize(),
-        }),
+        this.api.getWithMeta<ApprovalListDto>(
+          '/approvals',
+          this.query.params({ pendingOnly: this.pendingOnly() || undefined }),
+        ),
       );
       this.list.set(data);
-      this.total.set(meta?.total ?? data.items.length);
+      this.query.applyMeta(meta, data.items.length);
     } catch (err: any) {
       this.error.set(err?.error?.error?.message ?? 'Could not load the approval queue.');
     } finally {
@@ -84,9 +82,12 @@ export class ApprovalStore {
     }
   }
 
+  search(term: string): void {
+    if (this.query.setSearch(term)) void this.load();
+  }
+
   goToPage(page: number): void {
-    this.page.set(Math.min(Math.max(1, page), this.totalPages()));
-    void this.load();
+    if (this.query.goToPage(page)) void this.load();
   }
 
   /** `POST /quotations/:id/portal-link` — reissue the customer's magic link. */
@@ -141,6 +142,14 @@ export class FulfillmentStore {
 
   readonly stock = computed(() => this.overview()?.stock ?? []);
   readonly awaiting = computed(() => this.overview()?.awaiting ?? []);
+
+  /**
+   * Two lists in one payload, so two page cursors and one shared search term.
+   * `stockQuery.q` is the authoritative one; `awaitingQuery` mirrors it so both
+   * paginators report the right totals for the same filter.
+   */
+  readonly stockQuery = new ListQuery(25);
+  readonly awaitingQuery = new ListQuery(25);
   /** Drives screen 8's "Consolidate Remaining Backorder" banner. */
   readonly consolidationAvailable = computed(() => !!this.current()?.consolidationAvailableAt);
 
@@ -148,12 +157,38 @@ export class FulfillmentStore {
     this.loading.set(true);
     this.error.set(null);
     try {
-      this.overview.set(await firstValueFrom(this.api.get<FulfillmentListDto>('/fulfillment')));
+      const { data, meta } = await firstValueFrom(
+        this.api.getWithMeta<FulfillmentListDto>('/fulfillment', {
+          q: this.stockQuery.q() || undefined,
+          stockPage: this.stockQuery.page(),
+          stockPageSize: this.stockQuery.pageSize(),
+          awaitingPage: this.awaitingQuery.page(),
+          awaitingPageSize: this.awaitingQuery.pageSize(),
+        }),
+      );
+      this.overview.set(data);
+      this.stockQuery.applyMeta(meta?.stock as any, data.stock.length);
+      this.awaitingQuery.applyMeta(meta?.awaiting as any, data.awaiting.length);
     } catch (err: any) {
       this.error.set(err?.error?.error?.message ?? 'Could not load fulfillment.');
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /** One box filters both tables, so a warehouse name narrows stock and orders together. */
+  search(term: string): void {
+    const changed = this.stockQuery.setSearch(term);
+    this.awaitingQuery.setSearch(term);
+    if (changed) void this.load();
+  }
+
+  goToStockPage(page: number): void {
+    if (this.stockQuery.goToPage(page)) void this.load();
+  }
+
+  goToAwaitingPage(page: number): void {
+    if (this.awaitingQuery.goToPage(page)) void this.load();
   }
 
   async loadOne(id: string): Promise<void> {
@@ -196,30 +231,22 @@ export class BillingStore {
     relatedInvoices: InvoiceDto[];
   } | null>(null);
 
-  readonly pageSize = signal(50);
-  readonly subscriptionsPage = signal(1);
-  readonly subscriptionsTotal = signal(0);
-  readonly invoicesPage = signal(1);
-  readonly invoicesTotal = signal(0);
-  readonly subscriptionsTotalPages = computed(() =>
-    Math.max(1, Math.ceil(this.subscriptionsTotal() / this.pageSize())),
-  );
-  readonly invoicesTotalPages = computed(() =>
-    Math.max(1, Math.ceil(this.invoicesTotal() / this.pageSize())),
-  );
+  /** Two lists on two screens, so two independent query cursors. */
+  readonly subscriptionsQuery = new ListQuery(25);
+  readonly invoicesQuery = new ListQuery(25);
 
   async loadSubscriptions(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
     try {
       const { data, meta } = await firstValueFrom(
-        this.api.getWithMeta<SubscriptionListDto>('/subscriptions', {
-          page: this.subscriptionsPage(),
-          pageSize: this.pageSize(),
-        }),
+        this.api.getWithMeta<SubscriptionListDto>(
+          '/subscriptions',
+          this.subscriptionsQuery.params(),
+        ),
       );
       this.subscriptions.set(data);
-      this.subscriptionsTotal.set(meta?.total ?? data.items.length);
+      this.subscriptionsQuery.applyMeta(meta, data.items.length);
     } catch (err: any) {
       this.error.set(err?.error?.error?.message ?? 'Could not load subscriptions.');
     } finally {
@@ -232,13 +259,10 @@ export class BillingStore {
     this.error.set(null);
     try {
       const { data, meta } = await firstValueFrom(
-        this.api.getWithMeta<InvoiceListDto>('/invoices', {
-          page: this.invoicesPage(),
-          pageSize: this.pageSize(),
-        }),
+        this.api.getWithMeta<InvoiceListDto>('/invoices', this.invoicesQuery.params()),
       );
       this.invoices.set(data);
-      this.invoicesTotal.set(meta?.total ?? data.items.length);
+      this.invoicesQuery.applyMeta(meta, data.items.length);
     } catch (err: any) {
       this.error.set(err?.error?.error?.message ?? 'Could not load invoices.');
     } finally {
@@ -246,14 +270,20 @@ export class BillingStore {
     }
   }
 
+  searchSubscriptions(term: string): void {
+    if (this.subscriptionsQuery.setSearch(term)) void this.loadSubscriptions();
+  }
+
+  searchInvoices(term: string): void {
+    if (this.invoicesQuery.setSearch(term)) void this.loadInvoices();
+  }
+
   goToSubscriptionsPage(page: number): void {
-    this.subscriptionsPage.set(Math.min(Math.max(1, page), this.subscriptionsTotalPages()));
-    void this.loadSubscriptions();
+    if (this.subscriptionsQuery.goToPage(page)) void this.loadSubscriptions();
   }
 
   goToInvoicesPage(page: number): void {
-    this.invoicesPage.set(Math.min(Math.max(1, page), this.invoicesTotalPages()));
-    void this.loadInvoices();
+    if (this.invoicesQuery.goToPage(page)) void this.loadInvoices();
   }
 
   async loadBillingDetail(subscriptionId: string): Promise<void> {
@@ -307,19 +337,33 @@ export class DealHealthStore {
   readonly error = signal<string | null>(null);
   readonly dashboard = signal<DealHealthDashboardDto | null>(null);
   readonly alerts = computed(() => this.dashboard()?.alerts ?? []);
+  /** Paging and search apply to the alert table; the three tiles always count the whole board. */
+  readonly query = new ListQuery(25);
+  readonly type = signal<string | undefined>(undefined);
 
-  async load(type?: string): Promise<void> {
+  async load(type = this.type()): Promise<void> {
+    this.type.set(type);
     this.loading.set(true);
     this.error.set(null);
     try {
-      this.dashboard.set(
-        await firstValueFrom(this.api.get<DealHealthDashboardDto>('/deal-health', { type })),
+      const { data, meta } = await firstValueFrom(
+        this.api.getWithMeta<DealHealthDashboardDto>('/deal-health', this.query.params({ type })),
       );
+      this.dashboard.set(data);
+      this.query.applyMeta(meta, data.alerts.length);
     } catch (err: any) {
       this.error.set(err?.error?.error?.message ?? 'Could not load deal health.');
     } finally {
       this.loading.set(false);
     }
+  }
+
+  search(term: string): void {
+    if (this.query.setSearch(term)) void this.load();
+  }
+
+  goToPage(page: number): void {
+    if (this.query.goToPage(page)) void this.load();
   }
 
   /** `POST /deal-health/:id/{nudge,escalate}`. */

@@ -116,6 +116,33 @@ preview cannot disagree with what the server stores.
 Every feature is lazy-loaded. Route params bind to component `input()`s via
 `withComponentInputBinding()`.
 
+## Every list view searches and pages
+
+Every list screen carries a `df-search-box` and a `df-paginator`, both wired to
+server-side `?q=`/`?page=`/`?pageSize=` — nothing is filtered or sliced in the
+browser, so a 149-row collection never arrives in one response.
+
+The shared pieces, so no screen reimplements them:
+
+| Piece | What it is | Where |
+| --- | --- | --- |
+| `df-search-box` | debounced (250 ms) input with a clear button and Esc-to-clear | `shared/ui/search-box.component.ts` |
+| `df-paginator` | Prev/Next with "Page 2 of 6 · 149 total"; renders nothing at one page | `shared/ui/paginator.component.ts` |
+| `ListQuery` | the `q` / `page` / `pageSize` / `total` state a store or page holds | `core/state/list-query.ts` |
+
+`ListQuery` enforces the two rules that are easy to get wrong by hand: a **new
+search term resets to page 1** (or the user lands on page 4 of a two-page result
+and sees nothing), and `applyMeta` **steps back off a page that no longer
+exists** after a delete or a narrowing search.
+
+`df-empty-state` takes `[filtered]` and `[searchTerm]`, and swaps to the
+`NO_MATCHES` copy with a *Clear search* button. "You have no invoices" and
+"nothing matches *acme*" are different facts; showing the first when the second
+is true sends people hunting for a bug that is not there.
+
+Screens with two lists (Fulfillment: stock and awaiting orders) share one search
+box and keep a paginator per table.
+
 ## The three shells
 
 **`InternalShellComponent`** — white sticky header, the mockup's nav in order:

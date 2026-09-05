@@ -30,9 +30,50 @@ Per-module status, including what is still to build and who owns it:
 - **Money** is an integer count of minor units (cents). `120000` is `$1,200.00`.
 - **Dates** are ISO-8601 UTC strings.
 - **Percentages** are numbers, not fractions: `12` means 12%.
-- **Pagination:** `?page=1&pageSize=50`; `meta` carries `page`, `pageSize`,
-  `total`, `totalPages`.
-- **Search:** `?q=` where a list supports it.
+- **Pagination:** `?page=1&pageSize=25`; `meta` carries `page`, `pageSize`,
+  `total`, `totalPages`. Out-of-range values are clamped (`page` to ≥ 1,
+  `pageSize` to 1…200) rather than rejected, so a stale link degrades instead of
+  erroring.
+- **Search:** `?q=`. `total` is the size of the **filtered** set, so a paginator
+  reading it stays correct while a search is active.
+
+### Every list endpoint searches and pages
+
+This is a contract, not a per-module choice — see `apps/api/src/utils/listQuery.ts`,
+which every list handler goes through:
+
+| Endpoint | `?q=` matches on |
+| --- | --- |
+| `GET /quotations`, `GET /quotations/board` | number · customer · owner |
+| `GET /approvals` | quotation number · customer · owner |
+| `GET /invoices` | number · customer · order number |
+| `GET /subscriptions` | number · customer · plan |
+| `GET /deal-health` | quotation number · customer · owner · issue |
+| `GET /products`, `GET /products/dashboard` | name · SKU · description |
+| `GET /customers` | name · contact email |
+| `GET /pricelists` · `/warehouses` · `/subscription-plans` | name (and code) |
+| `GET /fulfillment` | warehouse · product · order number · customer |
+| `GET /portal/quotations` | number · line item |
+
+Three rules the helper enforces so no module has to remember them:
+
+1. **Search terms are literal.** Regex metacharacters are escaped, so `?q=.*`
+   matches the string `.*` and never every row in the collection.
+2. **Paged sorts are total.** Every paged query sorts by its key **plus `_id`**.
+   Mongo's `skip`/`limit` is only stable over a total order; sorting on a
+   non-unique key alone (`lastActivityAt`, `name`) lets tied documents move
+   between pages, so page 2 repeats a row from page 1 and drops another.
+3. **Aggregates count the whole set, never the page.** The Deal Health tiles,
+   the product-catalogue tiles and the approval/invoice/subscription status
+   chips are whole-collection counts; only the table under them is filtered
+   and paged.
+
+Two endpoints carry two lists in one payload and so page each independently:
+
+- `GET /fulfillment` — `?stockPage=` / `?awaitingPage=` with one shared `?q=`;
+  `meta.stock` and `meta.awaiting` each carry a full pagination block.
+- `GET /quotations/board` — grouped by stage rather than paged, so each column
+  returns at most `?cardsPerColumn=` (default 25) cards plus its true `cardCount`.
 
 ### Error codes
 
@@ -350,7 +391,7 @@ if the approval is already decided.
 
 | M    | Path                         | Auth                     | Request                | Response                     | Status |
 | ---- | ---------------------------- | ------------------------ | ---------------------- | ---------------------------- | ------ |
-| GET  | `/portal/quotations`         | portal token or CUSTOMER | —                      | `PortalQuotationListResponse` | ✅     |
+| GET  | `/portal/quotations`         | portal token or CUSTOMER | `?q=&page=&pageSize=`  | `PortalQuotationListResponse` | ✅     |
 | GET  | `/portal/q/:number`          | portal token or CUSTOMER | —                      | `PortalResolveResponse` | ✅     |
 | GET  | `/portal/q/:number/messages` | portal token or CUSTOMER | —                      | `NegotiationEventDto[]` | ✅     |
 | POST | `/portal/q/:number/comment`  | portal token or CUSTOMER | `PortalCommentRequest` | `NegotiationEventDto`   | 🔨 C   |

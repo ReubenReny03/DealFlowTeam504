@@ -6,6 +6,8 @@ import {
   ErrorStateComponent,
   LoadingComponent,
   MoneyPipe,
+  PaginatorComponent,
+  SearchBoxComponent,
   ShortDatePipe,
   StatusChipComponent,
 } from '../shared/ui';
@@ -29,6 +31,8 @@ import { PortalStore } from './portal.store';
     LoadingComponent,
     ErrorStateComponent,
     EmptyStateComponent,
+    PaginatorComponent,
+    SearchBoxComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -43,11 +47,20 @@ import { PortalStore } from './portal.store';
           }
         </p>
       </div>
-      @if (store.list().length) {
-        <span class="df-chip bg-slate-100 text-slate-700 border-slate-200">
-          {{ store.list().length }} {{ store.list().length === 1 ? 'quotation' : 'quotations' }}
-        </span>
-      }
+      <div class="flex flex-wrap items-center gap-3">
+        <df-search-box
+          [value]="store.listQuery.q()"
+          placeholder="Search by number or item"
+          width="15rem"
+          (search)="store.searchList($event)"
+        />
+        @if (store.listQuery.total()) {
+          <span class="df-chip bg-slate-100 text-slate-700 border-slate-200">
+            {{ store.listQuery.total() }}
+            {{ store.listQuery.total() === 1 ? 'quotation' : 'quotations' }}
+          </span>
+        }
+      </div>
     </div>
 
     @if (store.scopedToSingle()) {
@@ -63,7 +76,14 @@ import { PortalStore } from './portal.store';
       <div class="mt-6"><df-error-state [message]="store.listError()!" (retry)="reload()" /></div>
     } @else if (!store.list().length) {
       <div class="mt-6">
-        <df-empty-state [title]="empty.title" [body]="empty.body" icon="📄" />
+        <df-empty-state
+          [title]="empty.title"
+          [body]="empty.body"
+          icon="📄"
+          [filtered]="store.listQuery.isFiltered()"
+          [searchTerm]="store.listQuery.q()"
+          (clearSearch)="store.searchList('')"
+        />
       </div>
     } @else {
       <ul class="mt-6 space-y-3">
@@ -105,6 +125,12 @@ import { PortalStore } from './portal.store';
           </li>
         }
       </ul>
+      <df-paginator
+        [page]="store.listQuery.page()"
+        [pageSize]="store.listQuery.pageSize()"
+        [total]="store.listQuery.total()"
+        (go)="store.goToListPage($event)"
+      />
     }
   `,
 })

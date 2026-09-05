@@ -6,11 +6,35 @@ import {
   EMPTY_STATES, TIER_LABEL, type CustomerDto, type KanbanBoardDto, type QuotationDto, type QuotationSummaryDto,
 } from '@dealflow/shared';
 import { ApiService } from '../../core/api/api.service';
+import { ListQuery } from '../../core/state/list-query';
 import { ToastStore } from '../../core/state/toast.store';
 import {
   AgoPipe, ColumnDef, DataTableComponent, EmptyStateComponent, ErrorStateComponent,
-  KanbanBoardComponent, LoadingComponent, ModalComponent, MoneyPipe, StatusChipComponent,
+  KanbanBoardComponent, LoadingComponent, ModalComponent, MoneyPipe, PaginatorComponent,
+  SearchBoxComponent, StatusChipComponent,
 } from '../../shared/ui';
+
+/**
+ * The flat list returns full `QuotationDto`s while the board returns cards; this
+ * narrows one to the other so both views feed the same table columns.
+ */
+function toSummary(q: QuotationDto): QuotationSummaryDto {
+  return {
+    id: q.id,
+    number: q.number,
+    customerName: q.customerName,
+    tier: q.tier,
+    ownerName: q.ownerName,
+    stage: q.stage,
+    grandTotal: q.totals.grandTotal,
+    currency: q.currency,
+    riskLevel: q.risk.riskLevel,
+    riskScore: q.risk.riskScore,
+    lastActivityAt: q.lastActivityAt,
+    updatedAt: q.updatedAt,
+    lineCount: q.lines.length,
+  };
+}
 
 /** Screen 3 — Quotations, as a Kanban pipeline or a flat table. */
 @Component({
@@ -19,6 +43,7 @@ import {
   imports: [
     FormsModule, KanbanBoardComponent, DataTableComponent, LoadingComponent, ErrorStateComponent,
     EmptyStateComponent, ModalComponent, MoneyPipe, AgoPipe, StatusChipComponent,
+    PaginatorComponent, SearchBoxComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -27,7 +52,14 @@ import {
         <h1 class="df-h1">Quotations</h1>
         <p class="df-muted mt-1">Every open deal, grouped by where it is in the flow.</p>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- One term, both views: the board and the table take the same ?q=. -->
+        <df-search-box
+          [value]="query.q()"
+          placeholder="Search quotation, customer or owner"
+          width="18rem"
+          (search)="search($event)"
+        />
         <button type="button" class="df-btn-ghost" (click)="toggleView()">
           {{ view() === 'kanban' ? 'Switch to Table View' : 'Switch to Kanban View' }}
         </button>
@@ -41,7 +73,15 @@ import {
       <div class="mt-6"><df-error-state [message]="error()!" (retry)="load()" /></div>
     } @else if (isEmpty()) {
       <div class="mt-6">
-        <df-empty-state [title]="empty.title" [body]="empty.body" [cta]="empty.cta ?? null" (action)="create()" />
+        <df-empty-state
+          [title]="empty.title"
+          [body]="empty.body"
+          [cta]="empty.cta ?? null"
+          [filtered]="query.isFiltered()"
+          [searchTerm]="query.q()"
+          (action)="create()"
+          (clearSearch)="search('')"
+        />
       </div>
     } @else if (view() === 'kanban') {
       <div class="mt-6"><df-kanban-board [board]="board()!" (cardClick)="open($event)" /></div>
@@ -62,6 +102,12 @@ import {
             }
           </ng-template>
         </df-data-table>
+        <df-paginator
+          [page]="query.page()"
+          [pageSize]="query.pageSize()"
+          [total]="query.total()"
+          (go)="goToPage($event)"
+        />
       </div>
     }
 
@@ -97,9 +143,16 @@ export class QuotationListPage implements OnInit {
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly board = signal<KanbanBoardDto | null>(null);
+  protected readonly tableRows = signal<QuotationSummaryDto[]>([]);
   protected readonly view = signal<'kanban' | 'table'>('kanban');
   protected readonly empty = EMPTY_STATES['quotations'];
   protected readonly tierLabel = TIER_LABEL;
+
+  /**
+   * Search and paging for the TABLE view. The board takes the same `q` but is
+   * grouped by stage rather than paged, so only the table carries page state.
+   */
+  protected readonly query = new ListQuery(25);
 
   protected readonly pickerOpen = signal(false);
   protected readonly customersLoading = signal(false);
@@ -119,20 +172,40 @@ export class QuotationListPage implements OnInit {
   ];
 
   rows(): QuotationSummaryDto[] {
-    return (this.board()?.columns ?? []).flatMap((c) => c.cards);
+    return this.tableRows();
   }
 
   isEmpty(): boolean {
-    return !this.loading() && this.rows().length === 0;
+    if (this.loading()) return false;
+    return this.view() === 'kanban'
+      ? (this.board()?.columns ?? []).every((c) => c.cardCount === 0)
+      : this.tableRows().length === 0;
   }
 
   ngOnInit(): void { void this.load(); }
 
+  /**
+   * Loads whichever view is showing. The table is paged server-side — 149 seeded
+   * quotations must never arrive in one response — while the board fetches its
+   * stage columns with the same search term applied.
+   */
   async load(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
     try {
-      this.board.set(await firstValueFrom(this.api.get<KanbanBoardDto>('/quotations/board')));
+      if (this.view() === 'kanban') {
+        this.board.set(
+          await firstValueFrom(
+            this.api.get<KanbanBoardDto>('/quotations/board', { q: this.query.q() || undefined }),
+          ),
+        );
+      } else {
+        const { data, meta } = await firstValueFrom(
+          this.api.getWithMeta<QuotationDto[]>('/quotations', this.query.params()),
+        );
+        this.tableRows.set(data.map(toSummary));
+        this.query.applyMeta(meta, data.length);
+      }
     } catch (err: any) {
       this.error.set(err?.error?.error?.message ?? 'Could not load quotations.');
     } finally {
@@ -140,7 +213,20 @@ export class QuotationListPage implements OnInit {
     }
   }
 
-  toggleView(): void { this.view.update((v) => (v === 'kanban' ? 'table' : 'kanban')); }
+  search(term: string): void {
+    if (this.query.setSearch(term)) void this.load();
+  }
+
+  goToPage(page: number): void {
+    if (this.query.goToPage(page)) void this.load();
+  }
+
+  /** Switching views keeps the search term; it just re-fetches in the other shape. */
+  toggleView(): void {
+    this.view.update((v) => (v === 'kanban' ? 'table' : 'kanban'));
+    this.query.page.set(1);
+    void this.load();
+  }
   open(card: QuotationSummaryDto): void { void this.router.navigate(['/app/quotations', card.id]); }
 
   async create(): Promise<void> {

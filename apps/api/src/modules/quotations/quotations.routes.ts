@@ -51,7 +51,8 @@ import { requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { invalidState, notFound, staleVersion } from '../../utils/apiError.js';
-import { created, ok, paginate } from '../../utils/respond.js';
+import { listParams, pageMeta, searchFilter, stableSort } from '../../utils/listQuery.js';
+import { created, ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
 import { mountModuleHealth } from '../module.health.js';
@@ -166,26 +167,42 @@ async function resolveAssignee(role: Role): Promise<string | undefined> {
   return (user as any)?.name;
 }
 
-/** Screen 3's Kanban board. */
+/** The fields `?q=` matches on both the board and the flat list. */
+const QUOTATION_SEARCH_FIELDS = ['number', 'customerName', 'ownerName'];
+
+/**
+ * Screen 3's Kanban board. It takes the SAME `?q=` as the flat list, so
+ * toggling between Kanban and Table view keeps whatever the user searched for
+ * instead of silently dropping it.
+ *
+ * A column shows at most `cardsPerColumn` cards and reports its own `total`, so
+ * a 60-card Draft column stays a scannable column rather than an endless one.
+ */
 quotationsRouter.get(
   '/board',
   requireAuth(),
   asyncHandler(async (req, res) => {
+    const { q } = listParams(req.query);
+    const cardsPerColumn = Math.min(100, Math.max(5, Number(req.query.cardsPerColumn ?? 25) || 25));
     const filter: Record<string, unknown> = {};
     if (req.query.ownerId) filter.ownerId = req.query.ownerId;
+    Object.assign(filter, searchFilter(q, QUOTATION_SEARCH_FIELDS) ?? {});
+
     const quotes: any[] = await Quotation.find(filter).sort({ updatedAt: -1 }).lean();
     const board: KanbanBoardDto = {
       columns: KANBAN_STAGES.map((stage) => {
-        const cards = quotes.filter((q) => q.stage === stage).map(summarise);
+        const inStage = quotes.filter((qt) => qt.stage === stage);
+        const cards = inStage.map(summarise);
         return {
           stage,
           label: STAGE_LABEL[stage],
           total: cards.reduce((a, c) => a + c.grandTotal, 0),
-          cards: cards.slice(0, 25),
+          cards: cards.slice(0, cardsPerColumn),
+          cardCount: inStage.length,
         };
       }),
     };
-    ok(res, board, { totalQuotations: quotes.length });
+    ok(res, board, { totalQuotations: quotes.length, cardsPerColumn, q });
   }),
 );
 
@@ -689,29 +706,22 @@ quotationsRouter.get(
   '/',
   requireAuth(),
   asyncHandler(async (req, res) => {
-    const page = Math.max(1, Number(req.query.page ?? 1));
-    const pageSize = Math.min(500, Math.max(1, Number(req.query.pageSize ?? 50)));
+    const params = listParams(req.query, { maxPageSize: 500 });
     const filter: Record<string, unknown> = {};
     for (const field of ['stage', 'ownerId', 'customerId']) {
       const value = (req.query as Record<string, unknown>)[field];
       if (value !== undefined && value !== '') filter[field] = value;
     }
-    const q = req.query.q as string | undefined;
-    if (q) {
-      filter.$or = [
-        { number: { $regex: q, $options: 'i' } },
-        { customerName: { $regex: q, $options: 'i' } },
-      ];
-    }
+    Object.assign(filter, searchFilter(params.q, QUOTATION_SEARCH_FIELDS) ?? {});
 
     const [items, total] = await Promise.all([
       Quotation.find(filter)
-        .sort({ lastActivityAt: -1 })
-        .skip((page - 1) * pageSize)
-        .limit(pageSize)
+        .sort(stableSort({ lastActivityAt: -1 }))
+        .skip(params.skip)
+        .limit(params.pageSize)
         .lean(),
       Quotation.countDocuments(filter),
     ]);
-    ok(res, items.map(toQuotationDto), paginate([], page, pageSize, total));
+    ok(res, items.map(toQuotationDto), pageMeta(params, total));
   }),
 );

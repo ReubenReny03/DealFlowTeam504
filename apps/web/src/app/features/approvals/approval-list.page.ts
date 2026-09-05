@@ -16,6 +16,7 @@ import {
   LoadingComponent,
   MoneyPipe,
   PaginatorComponent,
+  SearchBoxComponent,
   StatusChipComponent,
 } from '../../shared/ui';
 
@@ -32,6 +33,7 @@ import {
     AgoPipe,
     StatusChipComponent,
     PaginatorComponent,
+    SearchBoxComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -42,15 +44,23 @@ import {
           Quotations only land here when their blended risk score requires a human.
         </p>
       </div>
-      <label class="flex items-center gap-2 text-sm text-slate-600">
-        <input
-          type="checkbox"
-          class="h-4 w-4 rounded border-slate-300"
-          [checked]="store.pendingOnly()"
-          (change)="togglePending()"
+      <div class="flex flex-wrap items-center gap-3">
+        <df-search-box
+          [value]="store.query.q()"
+          placeholder="Search quotation, customer or rep"
+          width="18rem"
+          (search)="store.search($event)"
         />
-        Pending Only
-      </label>
+        <label class="flex items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            class="h-4 w-4 rounded border-slate-300"
+            [checked]="store.pendingOnly()"
+            (change)="togglePending()"
+          />
+          Pending Only
+        </label>
+      </div>
     </div>
 
     <div class="mt-4 flex flex-wrap gap-2">
@@ -75,7 +85,16 @@ import {
     } @else if (store.error()) {
       <div class="mt-6"><df-error-state [message]="store.error()!" (retry)="reload()" /></div>
     } @else if (store.items().length === 0) {
-      <div class="mt-6"><df-empty-state icon="✅" [title]="empty.title" [body]="empty.body" /></div>
+      <div class="mt-6">
+        <df-empty-state
+          icon="✅"
+          [title]="empty.title"
+          [body]="empty.body"
+          [filtered]="store.query.isFiltered()"
+          [searchTerm]="store.query.q()"
+          (clearSearch)="store.search('')"
+        />
+      </div>
     } @else {
       <div class="mt-4">
         <df-data-table
@@ -122,9 +141,9 @@ import {
           </ng-template>
         </df-data-table>
         <df-paginator
-          [page]="store.page()"
-          [pageSize]="store.pageSize()"
-          [total]="store.total()"
+          [page]="store.query.page()"
+          [pageSize]="store.query.pageSize()"
+          [total]="store.query.total()"
           (go)="store.goToPage($event)"
         />
       </div>
@@ -162,7 +181,7 @@ export class ApprovalListPage implements OnInit {
   }
   togglePending(): void {
     this.store.pendingOnly.update((v) => !v);
-    this.store.page.set(1);
+    this.store.query.page.set(1);
     void this.store.load();
   }
   open(row: ApprovalDto): void {

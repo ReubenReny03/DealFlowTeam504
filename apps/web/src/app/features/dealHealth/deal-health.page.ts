@@ -4,18 +4,32 @@ import { AlertType, EMPTY_STATES, type DealAlertDto } from '@dealflow/shared';
 import { DealHealthStore } from '../../core/state/feature.stores';
 import { ToastStore } from '../../core/state/toast.store';
 import {
-  EmptyStateComponent, ErrorStateComponent, KpiTileComponent, LoadingComponent, ShortDatePipe,
+  EmptyStateComponent, ErrorStateComponent, KpiTileComponent, LoadingComponent, PaginatorComponent,
+  SearchBoxComponent, ShortDatePipe,
 } from '../../shared/ui';
 
 /** Screen 14 — Deal Health & Anomaly Dashboard. */
 @Component({
   selector: 'df-deal-health',
   standalone: true,
-  imports: [KpiTileComponent, LoadingComponent, ErrorStateComponent, EmptyStateComponent, ShortDatePipe],
+  imports: [
+    KpiTileComponent, LoadingComponent, ErrorStateComponent, EmptyStateComponent,
+    PaginatorComponent, SearchBoxComponent, ShortDatePipe,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <h1 class="df-h1">Deal Health & Anomalies</h1>
-    <p class="df-muted mt-1">Deals that have gone quiet, discounts out of character for the rep, and delivery promises at risk.</p>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 class="df-h1">Deal Health & Anomalies</h1>
+        <p class="df-muted mt-1">Deals that have gone quiet, discounts out of character for the rep, and delivery promises at risk.</p>
+      </div>
+      <df-search-box
+        [value]="store.query.q()"
+        placeholder="Search deal, customer or issue"
+        width="18rem"
+        (search)="store.search($event)"
+      />
+    </div>
 
     @if (store.loading()) {
       <div class="mt-6"><df-loading [count]="4" label="Loading deal health" /></div>
@@ -67,8 +81,23 @@ import {
             </tbody>
           </table>
         </div>
+        <df-paginator
+          [page]="store.query.page()"
+          [pageSize]="store.query.pageSize()"
+          [total]="store.query.total()"
+          (go)="store.goToPage($event)"
+        />
       } @else {
-        <div class="mt-6"><df-empty-state icon="💚" [title]="empty.title" [body]="empty.body" /></div>
+        <div class="mt-6">
+          <df-empty-state
+            icon="💚"
+            [title]="empty.title"
+            [body]="empty.body"
+            [filtered]="store.query.isFiltered()"
+            [searchTerm]="store.query.q()"
+            (clearSearch)="store.search('')"
+          />
+        </div>
       }
       }
     }

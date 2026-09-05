@@ -10,6 +10,7 @@ import {
   LoadingComponent,
   MoneyPipe,
   PaginatorComponent,
+  SearchBoxComponent,
   ShortDatePipe,
   StatusChipComponent,
 } from '../../shared/ui';
@@ -27,13 +28,24 @@ import {
     ShortDatePipe,
     StatusChipComponent,
     PaginatorComponent,
+    SearchBoxComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <h1 class="df-h1">Invoices</h1>
-    <p class="df-muted mt-1">
-      Nothing is billed before it ships — a partial delivery produces a partial invoice.
-    </p>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 class="df-h1">Invoices</h1>
+        <p class="df-muted mt-1">
+          Nothing is billed before it ships — a partial delivery produces a partial invoice.
+        </p>
+      </div>
+      <df-search-box
+        [value]="store.invoicesQuery.q()"
+        placeholder="Search invoice, order or customer"
+        width="18rem"
+        (search)="store.searchInvoices($event)"
+      />
+    </div>
 
     <div class="mt-4 flex flex-wrap gap-2">
       <span class="df-chip border-rose-200 bg-rose-100 text-rose-800"
@@ -54,7 +66,16 @@ import {
     } @else if (store.error()) {
       <div class="mt-6"><df-error-state [message]="store.error()!" (retry)="reload()" /></div>
     } @else if (items().length === 0) {
-      <div class="mt-6"><df-empty-state icon="🧾" [title]="empty.title" [body]="empty.body" /></div>
+      <div class="mt-6">
+        <df-empty-state
+          icon="🧾"
+          [title]="empty.title"
+          [body]="empty.body"
+          [filtered]="store.invoicesQuery.isFiltered()"
+          [searchTerm]="store.invoicesQuery.q()"
+          (clearSearch)="store.searchInvoices('')"
+        />
+      </div>
     } @else {
       <div class="mt-4">
         <df-data-table
@@ -86,9 +107,9 @@ import {
           </ng-template>
         </df-data-table>
         <df-paginator
-          [page]="store.invoicesPage()"
-          [pageSize]="store.pageSize()"
-          [total]="store.invoicesTotal()"
+          [page]="store.invoicesQuery.page()"
+          [pageSize]="store.invoicesQuery.pageSize()"
+          [total]="store.invoicesQuery.total()"
           (go)="store.goToInvoicesPage($event)"
         />
       </div>

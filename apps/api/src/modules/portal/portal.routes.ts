@@ -43,6 +43,7 @@ import { assertPortalScope, requirePortalToken } from '../../middleware/auth.js'
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { forbidden, invalidState, notFound } from '../../utils/apiError.js';
+import { listParams, pageMeta, searchFilter, stableSort } from '../../utils/listQuery.js';
 import { ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
@@ -109,10 +110,20 @@ portalRouter.get(
   '/quotations',
   requirePortalToken,
   asyncHandler(async (req, res) => {
+    const params = listParams(req.query, { defaultPageSize: 10, maxPageSize: 100 });
     const filter = portalQuotationFilter(req);
-    const [customer, quotations] = await Promise.all([
+    // A customer searches by the number on the document they were sent, or by
+    // what is on it — never by anything internal.
+    Object.assign(filter, searchFilter(params.q, ['number', 'lines.productName']) ?? {});
+
+    const [customer, quotations, total] = await Promise.all([
       Customer.findById(req.portal!.customerId).lean(),
-      Quotation.find(filter).sort({ lastActivityAt: -1, createdAt: -1 }).lean(),
+      Quotation.find(filter)
+        .sort(stableSort({ lastActivityAt: -1, createdAt: -1 }))
+        .skip(params.skip)
+        .limit(params.pageSize)
+        .lean(),
+      Quotation.countDocuments(filter),
     ]);
     if (!customer) throw notFound('That company could not be found.');
 
@@ -147,7 +158,7 @@ portalRouter.get(
       items,
       scopedToSingleQuotation: Boolean(req.portal!.quotationId),
     };
-    ok(res, payload);
+    ok(res, payload, pageMeta(params, total));
   }),
 );
 

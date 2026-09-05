@@ -2,17 +2,34 @@ import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/cor
 import { Router } from '@angular/router';
 import { EMPTY_STATES } from '@dealflow/shared';
 import { FulfillmentStore } from '../../core/state/feature.stores';
-import { EmptyStateComponent, ErrorStateComponent, LoadingComponent, StatusChipComponent } from '../../shared/ui';
+import {
+  EmptyStateComponent, ErrorStateComponent, LoadingComponent, PaginatorComponent,
+  SearchBoxComponent, StatusChipComponent,
+} from '../../shared/ui';
 
 /** Screen 7 — live stock per warehouse, and everything awaiting fulfillment. */
 @Component({
   selector: 'df-fulfillment-list',
   standalone: true,
-  imports: [LoadingComponent, ErrorStateComponent, EmptyStateComponent, StatusChipComponent],
+  imports: [
+    LoadingComponent, ErrorStateComponent, EmptyStateComponent, PaginatorComponent,
+    SearchBoxComponent, StatusChipComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <h1 class="df-h1">Fulfillment and Stock</h1>
-    <p class="df-muted mt-1">Availability is always in stock minus reserved — a reservation is real, not a note.</p>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 class="df-h1">Fulfillment and Stock</h1>
+        <p class="df-muted mt-1">Availability is always in stock minus reserved — a reservation is real, not a note.</p>
+      </div>
+      <!-- One box, both tables: a warehouse name narrows stock and orders together. -->
+      <df-search-box
+        [value]="store.stockQuery.q()"
+        placeholder="Search warehouse, product, order or customer"
+        width="22rem"
+        (search)="store.search($event)"
+      />
+    </div>
 
     @if (store.loading()) {
       <div class="mt-6"><df-loading [count]="5" label="Loading stock" /></div>
@@ -39,11 +56,21 @@ import { EmptyStateComponent, ErrorStateComponent, LoadingComponent, StatusChipC
                   <td class="df-td text-right font-mono font-semibold" [class.text-rose-600]="row.available === 0">{{ row.available }}</td>
                 </tr>
               } @empty {
-                <tr><td class="df-td py-8 text-center text-slate-400" colspan="5">No stock records.</td></tr>
+                <tr>
+                  <td class="df-td py-8 text-center text-slate-400" colspan="5">
+                    {{ store.stockQuery.isFiltered() ? 'No stock matches that search.' : 'No stock records.' }}
+                  </td>
+                </tr>
               }
             </tbody>
           </table>
         </div>
+        <df-paginator
+          [page]="store.stockQuery.page()"
+          [pageSize]="store.stockQuery.pageSize()"
+          [total]="store.stockQuery.total()"
+          (go)="store.goToStockPage($event)"
+        />
       </section>
 
       <section class="mt-8">
@@ -66,8 +93,21 @@ import { EmptyStateComponent, ErrorStateComponent, LoadingComponent, StatusChipC
               </tbody>
             </table>
           </div>
+          <df-paginator
+            [page]="store.awaitingQuery.page()"
+            [pageSize]="store.awaitingQuery.pageSize()"
+            [total]="store.awaitingQuery.total()"
+            (go)="store.goToAwaitingPage($event)"
+          />
         } @else {
-          <df-empty-state icon="📦" [title]="empty.title" [body]="empty.body" />
+          <df-empty-state
+            icon="📦"
+            [title]="empty.title"
+            [body]="empty.body"
+            [filtered]="store.awaitingQuery.isFiltered()"
+            [searchTerm]="store.awaitingQuery.q()"
+            (clearSearch)="store.search('')"
+          />
         }
       </section>
     }

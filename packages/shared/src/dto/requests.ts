@@ -257,7 +257,15 @@ export interface QuotationListQuery {
 }
 
 export interface KanbanBoardDto {
-  columns: { stage: QuoteStage; label: string; total: Money; cards: QuotationSummaryDto[] }[];
+  columns: {
+    stage: QuoteStage;
+    label: string;
+    total: Money;
+    /** At most `cardsPerColumn` of them — see `cardCount` for how many there are. */
+    cards: QuotationSummaryDto[];
+    /** Every quotation in this stage matching the current filter, not just the rendered cards. */
+    cardCount: number;
+  }[];
 }
 
 /* ------------------------------------------------------------------ dashboard (screen 2) */

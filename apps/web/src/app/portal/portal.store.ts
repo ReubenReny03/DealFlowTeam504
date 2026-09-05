@@ -7,6 +7,7 @@ import type {
   PortalResolveResponse,
 } from '@dealflow/shared';
 import { ApiService } from '../core/api/api.service';
+import { ListQuery } from '../core/state/list-query';
 import { SessionStore } from '../core/state/session.store';
 
 /**
@@ -32,13 +33,18 @@ export class PortalStore {
   readonly company = signal<PortalQuotationListResponse['customer'] | null>(null);
   /** True for a magic-link session: the link still unlocks exactly one quotation. */
   readonly scopedToSingle = signal(false);
+  /** A customer's list pages too — a long-standing account has plenty of quotations. */
+  readonly listQuery = new ListQuery(10);
   /**
    * True as soon as we know the company has more than one quotation — the
    * resolve response carries `siblingCount`, so the detail screen can offer the
    * way back without waiting on the list call.
    */
   readonly hasMultiple = computed(
-    () => this.list().length > 1 || (this.data()?.siblingCount ?? 0) > 1,
+    () =>
+      this.listQuery.total() > 1 ||
+      this.list().length > 1 ||
+      (this.data()?.siblingCount ?? 0) > 1,
   );
 
   readonly quotation = computed(() => this.data()?.quotation ?? null);
@@ -59,13 +65,17 @@ export class PortalStore {
     this.listLoading.set(true);
     this.listError.set(null);
     try {
-      const res = await firstValueFrom(
-        this.api.get<PortalQuotationListResponse>('/portal/quotations'),
+      const { data, meta } = await firstValueFrom(
+        this.api.getWithMeta<PortalQuotationListResponse>(
+          '/portal/quotations',
+          this.listQuery.params(),
+        ),
       );
-      this.list.set(res.items);
-      this.company.set(res.customer);
-      this.scopedToSingle.set(res.scopedToSingleQuotation);
-      return res.items;
+      this.list.set(data.items);
+      this.company.set(data.customer);
+      this.scopedToSingle.set(data.scopedToSingleQuotation);
+      this.listQuery.applyMeta(meta, data.items.length);
+      return data.items;
     } catch (err: any) {
       this.listError.set(
         err?.error?.error?.message ?? 'We could not load your quotations right now.',
@@ -74,6 +84,14 @@ export class PortalStore {
     } finally {
       this.listLoading.set(false);
     }
+  }
+
+  searchList(term: string): void {
+    if (this.listQuery.setSearch(term)) void this.loadList(true);
+  }
+
+  goToListPage(page: number): void {
+    if (this.listQuery.goToPage(page)) void this.loadList(true);
   }
 
   async load(numberOrId?: string): Promise<void> {

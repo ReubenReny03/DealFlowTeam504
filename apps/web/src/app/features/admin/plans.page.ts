@@ -6,16 +6,21 @@ import {
   type ProductDto, type SubscriptionPlanDto, type UpsertSubscriptionPlanRequest,
 } from '@dealflow/shared';
 import { ApiService } from '../../core/api/api.service';
+import { ListQuery } from '../../core/state/list-query';
 import { ToastStore } from '../../core/state/toast.store';
 import {
-  EmptyStateComponent, ErrorStateComponent, LoadingComponent, ModalComponent, MoneyPipe, StatusChipComponent,
+  EmptyStateComponent, ErrorStateComponent, LoadingComponent, ModalComponent, MoneyPipe,
+  PaginatorComponent, SearchBoxComponent, StatusChipComponent,
 } from '../../shared/ui';
 
 /** Recurring plan setup, including the proration and cancellation rules. */
 @Component({
   selector: 'df-plans',
   standalone: true,
-  imports: [FormsModule, LoadingComponent, ErrorStateComponent, EmptyStateComponent, ModalComponent, MoneyPipe, StatusChipComponent],
+  imports: [
+    FormsModule, LoadingComponent, ErrorStateComponent, EmptyStateComponent, ModalComponent, MoneyPipe,
+    PaginatorComponent, SearchBoxComponent, StatusChipComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -23,13 +28,26 @@ import {
         <h1 class="df-h1">Subscription Plans</h1>
         <p class="df-muted mt-1">Each plan carries its own proration and cancellation rule, which is what billing applies on a mid-cycle change.</p>
       </div>
-      <button type="button" class="df-btn-primary" (click)="create()">+ New Plan</button>
+      <div class="flex flex-wrap items-center gap-2">
+        <df-search-box [value]="query.q()" placeholder="Search plan" (search)="search($event)" />
+        <button type="button" class="df-btn-primary" (click)="create()">+ New Plan</button>
+      </div>
     </div>
 
     @if (loading()) { <div class="mt-6"><df-loading [count]="3" label="Loading plans" /></div> }
     @else if (error()) { <div class="mt-6"><df-error-state [message]="error()!" (retry)="load()" /></div> }
     @else if (!plans().length) {
-      <div class="mt-6"><df-empty-state [title]="empty.title" [body]="empty.body" [cta]="empty.cta ?? null" (action)="create()" /></div>
+      <div class="mt-6">
+        <df-empty-state
+          [title]="empty.title"
+          [body]="empty.body"
+          [cta]="empty.cta ?? null"
+          [filtered]="query.isFiltered()"
+          [searchTerm]="query.q()"
+          (action)="create()"
+          (clearSearch)="search('')"
+        />
+      </div>
     }
     @else {
       <div class="df-card df-scroll-x mt-6">
@@ -50,6 +68,12 @@ import {
           </tbody>
         </table>
       </div>
+      <df-paginator
+        [page]="query.page()"
+        [pageSize]="query.pageSize()"
+        [total]="query.total()"
+        (go)="goToPage($event)"
+      />
       <p class="mt-3 text-xs leading-relaxed text-slate-400">
         A plan bills at the beginning of each period. Under PRORATED, a mid-cycle change credits the unused remainder and charges the new
         amount over the same days; a negative net becomes a credit note.
@@ -116,6 +140,7 @@ export class PlansPage implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly plans = signal<SubscriptionPlanDto[]>([]);
   protected readonly empty = EMPTY_STATES['plans'];
+  protected readonly query = new ListQuery(25);
   protected readonly subscriptionProducts = signal<ProductDto[]>([]);
 
   protected readonly formOpen = signal(false);
@@ -132,16 +157,25 @@ export class PlansPage implements OnInit {
     this.loading.set(true); this.error.set(null);
     try {
       const [plans, products] = await Promise.all([
-        firstValueFrom(this.api.get<SubscriptionPlanDto[]>('/subscription-plans')),
+        firstValueFrom(this.api.getWithMeta<SubscriptionPlanDto[]>('/subscription-plans', this.query.params())),
         firstValueFrom(this.api.get<ProductDto[]>('/products', { status: 'ACTIVE' })),
       ]);
-      this.plans.set(plans ?? []);
+      this.plans.set(plans.data ?? []);
+      this.query.applyMeta(plans.meta, plans.data?.length ?? 0);
       this.subscriptionProducts.set((products ?? []).filter((p) => p.isSubscription));
     } catch (err: any) {
       this.error.set(err?.error?.error?.message ?? 'Could not load plans.');
     } finally {
       this.loading.set(false);
     }
+  }
+
+  search(term: string): void {
+    if (this.query.setSearch(term)) void this.load();
+  }
+
+  goToPage(page: number): void {
+    if (this.query.goToPage(page)) void this.load();
   }
 
   create(): void {

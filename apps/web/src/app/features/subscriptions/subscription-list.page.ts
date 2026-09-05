@@ -10,6 +10,7 @@ import {
   LoadingComponent,
   MoneyPipe,
   PaginatorComponent,
+  SearchBoxComponent,
   ShortDatePipe,
   StatusChipComponent,
 } from '../../shared/ui';
@@ -27,6 +28,7 @@ import {
     ShortDatePipe,
     StatusChipComponent,
     PaginatorComponent,
+    SearchBoxComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -37,7 +39,15 @@ import {
           Recurring lines live here with their own schedule, separate from the one-time invoice.
         </p>
       </div>
-      <button type="button" class="df-btn-primary" (click)="newPlan()">+ New Plan (Admin)</button>
+      <div class="flex flex-wrap items-center gap-3">
+        <df-search-box
+          [value]="store.subscriptionsQuery.q()"
+          placeholder="Search subscription, customer or plan"
+          width="18rem"
+          (search)="store.searchSubscriptions($event)"
+        />
+        <button type="button" class="df-btn-primary" (click)="newPlan()">+ New Plan (Admin)</button>
+      </div>
     </div>
 
     <div class="mt-4 flex flex-wrap gap-2">
@@ -57,7 +67,16 @@ import {
     } @else if (store.error()) {
       <div class="mt-6"><df-error-state [message]="store.error()!" (retry)="reload()" /></div>
     } @else if (items().length === 0) {
-      <div class="mt-6"><df-empty-state icon="🔁" [title]="empty.title" [body]="empty.body" /></div>
+      <div class="mt-6">
+        <df-empty-state
+          icon="🔁"
+          [title]="empty.title"
+          [body]="empty.body"
+          [filtered]="store.subscriptionsQuery.isFiltered()"
+          [searchTerm]="store.subscriptionsQuery.q()"
+          (clearSearch)="store.searchSubscriptions('')"
+        />
+      </div>
     } @else {
       <div class="mt-4">
         <df-data-table
@@ -87,9 +106,9 @@ import {
           </ng-template>
         </df-data-table>
         <df-paginator
-          [page]="store.subscriptionsPage()"
-          [pageSize]="store.pageSize()"
-          [total]="store.subscriptionsTotal()"
+          [page]="store.subscriptionsQuery.page()"
+          [pageSize]="store.subscriptionsQuery.pageSize()"
+          [total]="store.subscriptionsQuery.total()"
           (go)="store.goToSubscriptionsPage($event)"
         />
       </div>

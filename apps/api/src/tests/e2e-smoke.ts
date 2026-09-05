@@ -677,6 +677,141 @@ async function main(): Promise<void> {
     return `old link 403 · new link 200 · ${reissue.body.data.revokedCount} revoked`;
   });
 
+  /* ---- 16. Every list endpoint searches and pages ---- */
+  await step(16, 'Every list screen searches and pages server-side', 'E', async () => {
+    const rep = tokens[Role.SALES_REP];
+    const finance = tokens[Role.FINANCE];
+    const admin = tokens[Role.ADMIN];
+
+    // The contract: `meta` always carries the four pagination fields, a page is
+    // never longer than pageSize, and `total` counts the whole filtered set —
+    // not the page. 149 seeded quotations must never arrive in one response.
+    const lists: { path: string; token: string; rows: (body: any) => any[] }[] = [
+      { path: '/quotations', token: rep, rows: (b) => b.data },
+      { path: '/approvals', token: finance, rows: (b) => b.data.items },
+      { path: '/invoices', token: finance, rows: (b) => b.data.items },
+      { path: '/subscriptions', token: finance, rows: (b) => b.data.items },
+      { path: '/deal-health', token: rep, rows: (b) => b.data.alerts },
+      { path: '/products/dashboard', token: admin, rows: (b) => b.data.products },
+      { path: '/products', token: admin, rows: (b) => b.data },
+      { path: '/customers', token: admin, rows: (b) => b.data },
+      { path: '/pricelists', token: admin, rows: (b) => b.data },
+      { path: '/warehouses', token: admin, rows: (b) => b.data },
+      { path: '/subscription-plans', token: admin, rows: (b) => b.data },
+    ];
+
+    for (const list of lists) {
+      const res = await api('GET', `${list.path}?page=1&pageSize=3`, { token: list.token });
+      expectBuilt(res, 'E', `GET ${list.path} (paged)`);
+      assert(res.status === 200, `${list.path} failed: ${res.body.error?.message}`);
+      const meta = res.body.meta;
+      assert(meta, `${list.path} returned no pagination meta`);
+      for (const field of ['page', 'pageSize', 'total', 'totalPages']) {
+        assert(meta[field] !== undefined, `${list.path} meta is missing ${field}`);
+      }
+      assert(meta.pageSize === 3, `${list.path} ignored pageSize, got ${meta.pageSize}`);
+      assert(
+        list.rows(res.body).length <= 3,
+        `${list.path} returned ${list.rows(res.body).length} rows for pageSize=3`,
+      );
+    }
+
+    // Paging actually moves: page 2 of the quotation list is a different page.
+    const first = await api('GET', '/quotations?page=1&pageSize=5', { token: rep });
+    const second = await api('GET', '/quotations?page=2&pageSize=5', { token: rep });
+    assert(first.body.meta.total > 5, 'the seed should have more than one page of quotations');
+    const firstIds = new Set(first.body.data.map((q: any) => q.id));
+    assert(
+      second.body.data.every((q: any) => !firstIds.has(q.id)),
+      'page 2 repeated rows from page 1',
+    );
+
+    // Searching narrows the SAME set, and narrows `total` with it.
+    const searched = await api('GET', '/quotations?q=Acme', { token: rep });
+    assert(searched.status === 200, 'quotation search failed');
+    assert(
+      searched.body.data.length > 0 &&
+        searched.body.data.every((q: any) => /acme/i.test(q.customerName) || /acme/i.test(q.number)),
+      'every search hit must actually match the term',
+    );
+    assert(
+      searched.body.meta.total < first.body.meta.total,
+      'a search must narrow the total, not just the page',
+    );
+
+    // The board takes the same term, so switching views keeps the filter.
+    const board = await api('GET', '/quotations/board?q=Acme', { token: rep });
+    assert(board.status === 200, 'board search failed');
+    const boardCards = board.body.data.columns.flatMap((c: any) => c.cards);
+    assert(
+      boardCards.length > 0 && boardCards.every((c: any) => /acme/i.test(c.customerName)),
+      'the Kanban board must honour ?q= exactly as the flat list does',
+    );
+    assert(
+      board.body.data.columns.every((c: any) => c.cardCount >= c.cards.length),
+      'a column must report the true count behind its capped cards',
+    );
+
+    // A term that matches nothing is an empty page, never an error or everything.
+    const none = await api('GET', '/quotations?q=zzzznothingmatchesthis', { token: rep });
+    assert(
+      none.status === 200 && none.body.data.length === 0 && none.body.meta.total === 0,
+      'a search with no matches must return an empty page, not the whole collection',
+    );
+
+    // Regex metacharacters are data, not syntax.
+    const literal = await api('GET', '/quotations?q=.*', { token: rep });
+    assert(
+      literal.status === 200 && literal.body.meta.total === 0,
+      'a search term must be matched literally, never executed as a regex',
+    );
+
+    // Out-of-range and junk paging degrade to something sane, never a 500.
+    const silly = await api('GET', '/quotations?page=0&pageSize=-4', { token: rep });
+    assert(
+      silly.status === 200 && silly.body.meta.page === 1 && silly.body.meta.pageSize >= 1,
+      'a nonsense page/pageSize must be clamped, not honoured',
+    );
+
+    // Fulfillment carries two lists in one payload, so it pages each separately
+    // under one shared search term.
+    const ful = await api('GET', '/fulfillment?stockPageSize=2&awaitingPageSize=1', { token: rep });
+    expectBuilt(ful, 'E', 'GET /fulfillment (paged)');
+    assert(ful.status === 200, `fulfillment failed: ${ful.body.error?.message}`);
+    assert(
+      ful.body.meta?.stock?.total !== undefined && ful.body.meta?.awaiting?.total !== undefined,
+      'fulfillment must report a pagination block for each of its two lists',
+    );
+    assert(
+      ful.body.data.stock.length <= 2 && ful.body.data.awaiting.length <= 1,
+      'fulfillment ignored its per-list page sizes',
+    );
+    const fulSearch = await api('GET', '/fulfillment?q=East', { token: rep });
+    assert(
+      fulSearch.status === 200 && fulSearch.body.meta.stock.total < ful.body.meta.stock.total,
+      'one search box must narrow the stock table',
+    );
+
+    // The customer portal pages too, and its search stays inside the company.
+    const portal = await api('GET', '/portal/quotations?pageSize=2', {
+      token: tokens['das@betaindustries.test'],
+    });
+    assert(portal.status === 200 && portal.body.data.items.length <= 2, 'the portal list did not page');
+    assert(
+      portal.body.meta.total > 2,
+      `Beta should have more than one page of quotations, got ${portal.body.meta.total}`,
+    );
+    const portalSearch = await api('GET', '/portal/quotations?q=Q-1042', {
+      token: tokens['das@betaindustries.test'],
+    });
+    assert(
+      portalSearch.body.data.items.length === 0,
+      "a portal search must never reach another company's quotation",
+    );
+
+    return `${lists.length + 1} list endpoints page + report meta · search narrows total · regex is literal · portal search stays in-company`;
+  });
+
   /* ------------------------------------------------------------------ report */
 
   server.close();

@@ -16,6 +16,7 @@ import { DealAlert, Notification, Order, Quotation, User } from '../../db/models
 import { requireAuth } from '../../middleware/auth.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { invalidState, notFound } from '../../utils/apiError.js';
+import { listParams, pageMeta, searchFilter, stableSort } from '../../utils/listQuery.js';
 import { ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
@@ -34,12 +35,21 @@ dealHealthRouter.get(
   '/',
   requireAuth([Role.ADMIN, Role.SALES_MANAGER, Role.SALES_REP, Role.FINANCE]),
   asyncHandler(async (req, res) => {
+    const params = listParams(req.query);
     const filter: Record<string, unknown> = {};
     if (req.query.type) filter.type = req.query.type;
     if (req.query.status) filter.status = req.query.status;
+    Object.assign(
+      filter,
+      searchFilter(params.q, ['quotationNumber', 'customerName', 'ownerName', 'issue']) ?? {},
+    );
 
-    const [alerts, stalled, anomalies, slippage] = await Promise.all([
-      DealAlert.find(filter).sort({ flaggedAt: -1 }).limit(100).lean(),
+    // The three tiles count the WHOLE board, never the current page — a manager
+    // reading "5 stalled" must get five whether or not a search is narrowing the
+    // table underneath it.
+    const [alerts, alertTotal, stalled, anomalies, slippage] = await Promise.all([
+      DealAlert.find(filter).sort(stableSort({ flaggedAt: -1 })).skip(params.skip).limit(params.pageSize).lean(),
+      DealAlert.countDocuments(filter),
       DealAlert.countDocuments({ type: AlertType.STALLED_DEAL, status: { $ne: 'RESOLVED' } }),
       DealAlert.countDocuments({ type: AlertType.DISCOUNT_ANOMALY, status: { $ne: 'RESOLVED' } }),
       DealAlert.countDocuments({ type: AlertType.DELIVERY_SLIPPAGE, status: { $ne: 'RESOLVED' } }),
@@ -51,7 +61,7 @@ dealHealthRouter.get(
       deliverySlippage: slippage,
       alerts: toDtoList(alerts),
     };
-    ok(res, payload);
+    ok(res, payload, pageMeta(params, alertTotal));
   }),
 );
 

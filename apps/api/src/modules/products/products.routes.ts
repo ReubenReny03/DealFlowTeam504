@@ -14,6 +14,7 @@ import { requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { conflict, notFound } from '../../utils/apiError.js';
+import { listParams, pageMeta, searchFilter, stableSort } from '../../utils/listQuery.js';
 import { created, ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { diff, writeAudit } from '../../utils/audit.js';
@@ -28,24 +29,39 @@ mountModuleHealth(productsRouter, {
   todo: [],
 });
 
-/** Screen 16's three tiles. Counts are real, never constants. */
+/**
+ * Screen 16's three tiles plus the catalogue table. Counts are real, never
+ * constants — and they count the WHOLE catalogue, while `products` is the
+ * searched, paged page of it. A tile that moved every time you typed in the
+ * search box would be reporting something nobody asked about.
+ */
 productsRouter.get(
   '/dashboard',
   requireAuth(),
-  asyncHandler(async (_req, res) => {
-    const [products, priceLists] = await Promise.all([
-      Product.find().sort({ name: 1 }).lean(),
+  asyncHandler(async (req, res) => {
+    const params = listParams(req.query);
+    const filter: Record<string, unknown> = {};
+    for (const field of ['category', 'status']) {
+      const value = (req.query as Record<string, unknown>)[field];
+      if (value !== undefined && value !== '') filter[field] = value;
+    }
+    Object.assign(filter, searchFilter(params.q, ['name', 'sku', 'description']) ?? {});
+
+    const [products, total, allProducts, priceLists] = await Promise.all([
+      Product.find(filter).sort(stableSort({ name: 1 })).skip(params.skip).limit(params.pageSize).lean(),
+      Product.countDocuments(filter),
+      Product.find().select('status variants').lean(),
       PriceList.find().lean(),
     ]);
     const currencies = new Set<string>();
     for (const pl of priceLists as any[]) for (const c of pl.currencies ?? []) currencies.add(c);
     const dashboard: ProductDashboardDto = {
-      totalActive: (products as any[]).filter((p) => p.status === ProductStatus.ACTIVE).length,
-      totalArchived: (products as any[]).filter((p) => p.status === ProductStatus.ARCHIVED).length,
+      totalActive: (allProducts as any[]).filter((p) => p.status === ProductStatus.ACTIVE).length,
+      totalArchived: (allProducts as any[]).filter((p) => p.status === ProductStatus.ARCHIVED).length,
       priceListTiers: priceLists.length,
       priceListCurrencies: currencies.size,
       // Every variant value is a distinct SKU; a product with no variants is one SKU.
-      variantSkuCount: (products as any[]).reduce(
+      variantSkuCount: (allProducts as any[]).reduce(
         (acc, p) =>
           acc +
           (p.variants?.length
@@ -55,7 +71,7 @@ productsRouter.get(
       ),
       products: toDtoList(products),
     };
-    ok(res, dashboard);
+    ok(res, dashboard, pageMeta(params, total));
   }),
 );
 

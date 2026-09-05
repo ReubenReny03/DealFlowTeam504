@@ -18,7 +18,8 @@ import { requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { badRequest, invalidState, notFound } from '../../utils/apiError.js';
-import { ok, paginate } from '../../utils/respond.js';
+import { listParams, pageMeta, searchFilter, stableSort } from '../../utils/listQuery.js';
+import { ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
 import { toCsv } from '../../utils/csv.js';
@@ -47,16 +48,19 @@ invoicesRouter.get(
   '/',
   requireAuth(FINANCE_VIEW),
   asyncHandler(async (req, res) => {
-    const page = Math.max(1, Number(req.query.page ?? 1));
-    const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize ?? 50)));
+    const params = listParams(req.query);
     const filter: Record<string, unknown> = {};
     if (req.query.status) filter.status = req.query.status;
     if (req.query.customerId) filter.customerId = req.query.customerId;
+    Object.assign(
+      filter,
+      searchFilter(params.q, ['number', 'customerName', 'orderNumber']) ?? {},
+    );
     const [items, total, unpaid, paid, overdue] = await Promise.all([
       Invoice.find(filter)
-        .sort({ issueDate: -1 })
-        .skip((page - 1) * pageSize)
-        .limit(pageSize)
+        .sort(stableSort({ issueDate: -1 }))
+        .skip(params.skip)
+        .limit(params.pageSize)
         .lean(),
       Invoice.countDocuments(filter),
       Invoice.countDocuments({
@@ -66,7 +70,7 @@ invoicesRouter.get(
       Invoice.countDocuments({ status: InvoiceStatus.OVERDUE }),
     ]);
     const payload: InvoiceListDto = { counts: { unpaid, paid, overdue }, items: toDtoList(items) };
-    ok(res, payload, paginate([], page, pageSize, total));
+    ok(res, payload, pageMeta(params, total));
   }),
 );
 

@@ -20,7 +20,8 @@ import { requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { forbidden, invalidState, notFound } from '../../utils/apiError.js';
-import { ok, paginate } from '../../utils/respond.js';
+import { listParams, pageMeta, searchFilter, stableSort } from '../../utils/listQuery.js';
+import { ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
 import { mountModuleHealth } from '../module.health.js';
@@ -49,8 +50,7 @@ approvalsRouter.get(
   '/',
   requireAuth(APPROVER_VIEW),
   asyncHandler(async (req, res) => {
-    const page = Math.max(1, Number(req.query.page ?? 1));
-    const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize ?? 50)));
+    const params = listParams(req.query);
     const filter: Record<string, unknown> = {};
     if (req.query.status) filter.status = req.query.status;
     if (req.query.pendingOnly === 'true') filter.status = ApprovalStatus.PENDING;
@@ -59,12 +59,18 @@ approvalsRouter.get(
       filter.status = ApprovalStatus.PENDING;
       filter.currentStage = req.user!.role;
     }
+    // The queue is searched by the things an approver actually knows: the
+    // quotation number they were sent, the customer, or the rep who submitted it.
+    Object.assign(
+      filter,
+      searchFilter(params.q, ['quotationNumber', 'customerName', 'ownerName']) ?? {},
+    );
 
     const [items, total, pending, returned, approved, rejected] = await Promise.all([
       Approval.find(filter)
-        .sort({ submittedAt: -1 })
-        .skip((page - 1) * pageSize)
-        .limit(pageSize)
+        .sort(stableSort({ submittedAt: -1 }))
+        .skip(params.skip)
+        .limit(params.pageSize)
         .lean(),
       Approval.countDocuments(filter),
       Approval.countDocuments({ status: ApprovalStatus.PENDING }),
@@ -77,7 +83,7 @@ approvalsRouter.get(
       counts: { pending, returned, approved, rejected },
       items: toDtoList(items),
     };
-    ok(res, payload, paginate([], page, pageSize, total));
+    ok(res, payload, pageMeta(params, total));
   }),
 );
 
