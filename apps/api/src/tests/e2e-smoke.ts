@@ -34,7 +34,13 @@ import { waitForMongo } from '../../../../scripts/wait-for-mongo.js';
 /* ------------------------------------------------------------------ harness */
 
 let baseUrl = '';
-const results: { n: number; title: string; status: 'PASS' | 'PENDING' | 'FAIL'; note: string; owner?: string }[] = [];
+const results: {
+  n: number;
+  title: string;
+  status: 'PASS' | 'PENDING' | 'FAIL';
+  note: string;
+  owner?: string;
+}[] = [];
 
 interface Res<T = any> {
   status: number;
@@ -65,7 +71,10 @@ async function api<T = any>(
 }
 
 class Pending extends Error {
-  constructor(public readonly owner: string, message: string) {
+  constructor(
+    public readonly owner: string,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -76,7 +85,11 @@ function assert(condition: unknown, message: string): asserts condition {
 
 /** Treat a not-yet-built endpoint as PENDING rather than a failure. */
 function expectBuilt(res: Res, owner: string, what: string): void {
-  if (res.status === 404 && res.body.error?.code === 'NOT_FOUND' && /No route matches/.test(res.body.error.message)) {
+  if (
+    res.status === 404 &&
+    res.body.error?.code === 'NOT_FOUND' &&
+    /No route matches/.test(res.body.error.message)
+  ) {
     throw new Pending(owner, `${what} is not implemented yet`);
   }
   if (res.status === 501) throw new Pending(owner, `${what} is stubbed`);
@@ -127,125 +140,205 @@ async function main(): Promise<void> {
   console.log('');
 
   /* ---- 0. Every demo credential works and lands on the right screen ---- */
-  await step(0, 'All seven demo credentials authenticate and land on the correct screen', 'A', async () => {
-    const accounts = await api('GET', '/auth/demo-accounts');
-    assert(accounts.body.data.length === 7, `expected 7 demo accounts, got ${accounts.body.data.length}`);
-    for (const account of accounts.body.data) {
-      const res = await api('POST', '/auth/login', { body: { email: account.email, password: account.password } });
-      assert(res.status === 200, `${account.email} failed to log in (${res.status} ${res.body.error?.message})`);
+  await step(
+    0,
+    'All seven demo credentials authenticate and land on the correct screen',
+    'A',
+    async () => {
+      const accounts = await api('GET', '/auth/demo-accounts');
       assert(
-        res.body.data.user.landingRoute === account.landingRoute,
-        `${account.email} landed on ${res.body.data.user.landingRoute}, expected ${account.landingRoute}`,
+        accounts.body.data.length === 7,
+        `expected 7 demo accounts, got ${accounts.body.data.length}`,
       );
-      tokens[account.role === Role.CUSTOMER ? account.email : account.role] = res.body.data.token;
-    }
-    // A bad password must not authenticate.
-    const bad = await api('POST', '/auth/login', { body: { email: 'rep@dealflow360.test', password: 'wrong' } });
-    assert(bad.status === 401, 'a wrong password must be rejected with 401');
-    return 'seven personas signed in; a wrong password is rejected with 401';
-  });
+      for (const account of accounts.body.data) {
+        const res = await api('POST', '/auth/login', {
+          body: { email: account.email, password: account.password },
+        });
+        assert(
+          res.status === 200,
+          `${account.email} failed to log in (${res.status} ${res.body.error?.message})`,
+        );
+        assert(
+          res.body.data.user.landingRoute === account.landingRoute,
+          `${account.email} landed on ${res.body.data.user.landingRoute}, expected ${account.landingRoute}`,
+        );
+        tokens[account.role === Role.CUSTOMER ? account.email : account.role] = res.body.data.token;
+      }
+      // A bad password must not authenticate.
+      const bad = await api('POST', '/auth/login', {
+        body: { email: 'rep@dealflow360.test', password: 'wrong' },
+      });
+      assert(bad.status === 401, 'a wrong password must be rejected with 401');
+      return 'seven personas signed in; a wrong password is rejected with 401';
+    },
+  );
 
   /* ---- 1. Backend config exists: a discount tier, a warehouse and a plan ---- */
-  await step(1, 'Backend configuration is present (discount tiers, warehouse, subscription plan)', 'A', async () => {
-    const config = await api('GET', '/config', { token: tokens[Role.ADMIN] });
-    assert(config.status === 200, 'config endpoint failed');
-    assert(config.body.data.tierCeilings.GOLD === 15, 'Gold tier ceiling should be 15');
-    assert(config.body.data.categoryCeilings.SERVICES === 10, 'Services category ceiling should be 10');
-    const warehouses = await api('GET', '/warehouses', { token: tokens[Role.ADMIN] });
-    assert(warehouses.body.data.length >= 2, 'expected at least two warehouses');
-    const plans = await api('GET', '/subscription-plans', { token: tokens[Role.ADMIN] });
-    assert(plans.body.data.length >= 1, 'expected at least one subscription plan');
-    return `Gold 15% / Services 10%, ${warehouses.body.data.length} warehouses, ${plans.body.data.length} plans`;
-  });
+  await step(
+    1,
+    'Backend configuration is present (discount tiers, warehouse, subscription plan)',
+    'A',
+    async () => {
+      const config = await api('GET', '/config', { token: tokens[Role.ADMIN] });
+      assert(config.status === 200, 'config endpoint failed');
+      assert(config.body.data.tierCeilings.GOLD === 15, 'Gold tier ceiling should be 15');
+      assert(
+        config.body.data.categoryCeilings.SERVICES === 10,
+        'Services category ceiling should be 10',
+      );
+      const warehouses = await api('GET', '/warehouses', { token: tokens[Role.ADMIN] });
+      assert(warehouses.body.data.length >= 2, 'expected at least two warehouses');
+      const plans = await api('GET', '/subscription-plans', { token: tokens[Role.ADMIN] });
+      assert(plans.body.data.length >= 1, 'expected at least one subscription plan');
+      return `Gold 15% / Services 10%, ${warehouses.body.data.length} warehouses, ${plans.body.data.length} plans`;
+    },
+  );
 
   /* ---- 2. A quotation with an over-limit discount ---- */
-  await step(2, 'A quotation with an over-limit discount is scored, not accepted silently', 'B', async () => {
-    const res = await api('GET', '/quotations?q=Q-1042', { token: tokens[Role.SALES_REP] });
-    assert(res.status === 200, 'quotation list failed');
-    const q = res.body.data.find((x: any) => x.number === 'Q-1042');
-    assert(q, 'Q-1042 not found');
-    assert(q.risk.riskScore === 33, `Q-1042 should score 33, got ${q.risk.riskScore}`);
-    assert(q.risk.riskLevel === RiskLevel.HIGH, `Q-1042 should be HIGH, got ${q.risk.riskLevel}`);
-    const over = q.risk.explanation.filter((r: any) => r.status === 'OVER');
-    assert(over.length === 1 && over[0].overBy === 8, 'the Onsite Setup line should be 8 points over');
-    return `Q-1042 = ${formatMoney(q.totals.grandTotal)} · score 33 · HIGH · "${over[0].line}" 8pt over its 10% limit`;
-  });
+  await step(
+    2,
+    'A quotation with an over-limit discount is scored, not accepted silently',
+    'B',
+    async () => {
+      const res = await api('GET', '/quotations?q=Q-1042', { token: tokens[Role.SALES_REP] });
+      assert(res.status === 200, 'quotation list failed');
+      const q = res.body.data.find((x: any) => x.number === 'Q-1042');
+      assert(q, 'Q-1042 not found');
+      assert(q.risk.riskScore === 33, `Q-1042 should score 33, got ${q.risk.riskScore}`);
+      assert(q.risk.riskLevel === RiskLevel.HIGH, `Q-1042 should be HIGH, got ${q.risk.riskLevel}`);
+      const over = q.risk.explanation.filter((r: any) => r.status === 'OVER');
+      assert(
+        over.length === 1 && over[0].overBy === 8,
+        'the Onsite Setup line should be 8 points over',
+      );
+      return `Q-1042 = ${formatMoney(q.totals.grandTotal)} · score 33 · HIGH · "${over[0].line}" 8pt over its 10% limit`;
+    },
+  );
 
   /* ---- 3. The quote asks for approval by itself ---- */
   await step(3, 'The quotation routed itself for approval — the rep never asked', 'C', async () => {
-    const res = await api('GET', '/approvals?pendingOnly=true', { token: tokens[Role.SALES_MANAGER] });
+    const res = await api('GET', '/approvals?pendingOnly=true', {
+      token: tokens[Role.SALES_MANAGER],
+    });
     assert(res.status === 200, 'approvals list failed');
     const approval = res.body.data.items.find((a: any) => a.quotationNumber === 'Q-1042');
     assert(approval, 'Q-1042 is not in the pending approval queue');
     assert(approval.status === ApprovalStatus.PENDING, 'Q-1042 approval should be PENDING');
     assert(
-      JSON.stringify(approval.risk.requiredChain) === JSON.stringify([Role.SALES_MANAGER, Role.FINANCE]),
+      JSON.stringify(approval.risk.requiredChain) ===
+        JSON.stringify([Role.SALES_MANAGER, Role.FINANCE]),
       `chain should be [SALES_MANAGER, FINANCE], got ${JSON.stringify(approval.risk.requiredChain)}`,
     );
-    assert(approval.currentStage === Role.SALES_MANAGER, 'Q-1042 should be sitting with the Sales Manager');
-    assert(approval.trail.length === 3, `expected 3 audit-trail entries, got ${approval.trail.length}`);
+    assert(
+      approval.currentStage === Role.SALES_MANAGER,
+      'Q-1042 should be sitting with the Sales Manager',
+    );
+    assert(
+      approval.trail.length === 3,
+      `expected 3 audit-trail entries, got ${approval.trail.length}`,
+    );
     return `queue shows ${res.body.data.counts.pending} pending; Q-1042 -> M. Shah, then Finance; trail has 3 entries`;
   });
 
   /* ---- 4. Accept an upsell and watch the totals move ---- */
-  await step(4, 'Accepting an upsell suggestion updates the order total and margin immediately', 'B', async () => {
-    const res = await api('GET', '/upsell/suggestions?quotationId=Q-1042', { token: tokens[Role.SALES_REP] });
-    expectBuilt(res, 'B', 'GET /upsell/suggestions');
-    assert(res.status === 200, `upsell suggestions failed: ${res.body.error?.message}`);
-    assert(res.body.data.length > 0, 'expected at least one upsell suggestion');
-    assert(res.body.data.every((s: any) => typeof s.marginDelta === 'number'), 'every suggestion must carry a margin delta');
-    return `${res.body.data.length} suggestions, top: ${res.body.data[0].name} (+${formatMoney(res.body.data[0].marginDelta)})`;
-  });
+  await step(
+    4,
+    'Accepting an upsell suggestion updates the order total and margin immediately',
+    'B',
+    async () => {
+      const res = await api('GET', '/upsell/suggestions?quotationId=Q-1042', {
+        token: tokens[Role.SALES_REP],
+      });
+      expectBuilt(res, 'B', 'GET /upsell/suggestions');
+      assert(res.status === 200, `upsell suggestions failed: ${res.body.error?.message}`);
+      assert(res.body.data.length > 0, 'expected at least one upsell suggestion');
+      assert(
+        res.body.data.every((s: any) => typeof s.marginDelta === 'number'),
+        'every suggestion must carry a margin delta',
+      );
+      return `${res.body.data.length} suggestions, top: ${res.body.data[0].name} (+${formatMoney(res.body.data[0].marginDelta)})`;
+    },
+  );
 
   /* ---- 5. Approved quote pulls stock from the right warehouses ---- */
-  await step(5, 'Stock is pulled from the correct warehouses, splitting across two when needed', 'D', async () => {
-    const overview = await api('GET', '/fulfillment', { token: tokens[Role.FINANCE] });
-    assert(overview.status === 200, 'fulfillment overview failed');
-    const laptopMain = overview.body.data.stock.find(
-      (s: any) => s.productName === 'Laptop Pro 14' && s.warehouseName === 'Main Warehouse',
-    );
-    const laptopEast = overview.body.data.stock.find(
-      (s: any) => s.productName === 'Laptop Pro 14' && s.warehouseName === 'East Depot',
-    );
-    assert(laptopMain?.available === 18, `Main Warehouse should have 18 available, got ${laptopMain?.available}`);
-    assert(laptopEast?.available === 6, `East Depot should have 6 available, got ${laptopEast?.available}`);
-    const backorder = overview.body.data.awaiting.find((a: any) => a.status === 'BACKORDER');
-    assert(backorder, 'expected at least one order sitting on backorder');
+  await step(
+    5,
+    'Stock is pulled from the correct warehouses, splitting across two when needed',
+    'D',
+    async () => {
+      const overview = await api('GET', '/fulfillment', { token: tokens[Role.FINANCE] });
+      assert(overview.status === 200, 'fulfillment overview failed');
+      const laptopMain = overview.body.data.stock.find(
+        (s: any) => s.productName === 'Laptop Pro 14' && s.warehouseName === 'Main Warehouse',
+      );
+      const laptopEast = overview.body.data.stock.find(
+        (s: any) => s.productName === 'Laptop Pro 14' && s.warehouseName === 'East Depot',
+      );
+      assert(
+        laptopMain?.available === 18,
+        `Main Warehouse should have 18 available, got ${laptopMain?.available}`,
+      );
+      assert(
+        laptopEast?.available === 6,
+        `East Depot should have 6 available, got ${laptopEast?.available}`,
+      );
+      const backorder = overview.body.data.awaiting.find((a: any) => a.status === 'BACKORDER');
+      assert(backorder, 'expected at least one order sitting on backorder');
 
-    const plan = await api('POST', '/fulfillment/plan/ORD-1032', { token: tokens[Role.FINANCE] });
-    expectBuilt(plan, 'D', 'POST /fulfillment/plan/:orderId');
-    assert(plan.status === 200, `split planning failed: ${plan.body.error?.message}`);
-    assert(plan.body.data.rationale?.length > 0, 'the split must explain itself');
-    return `Main 18 / East 6 available; ${backorder.orderNumber} is on backorder with a rationale`;
-  });
+      const plan = await api('POST', '/fulfillment/plan/ORD-1032', { token: tokens[Role.FINANCE] });
+      expectBuilt(plan, 'D', 'POST /fulfillment/plan/:orderId');
+      assert(plan.status === 200, `split planning failed: ${plan.body.error?.message}`);
+      assert(plan.body.data.rationale?.length > 0, 'the split must explain itself');
+      return `Main 18 / East 6 available; ${backorder.orderNumber} is on backorder with a rationale`;
+    },
+  );
 
   /* ---- 6. Hybrid billing: one order, two artefacts ---- */
-  await step(6, 'One order produces a one-time invoice AND a separate recurring schedule', 'D', async () => {
-    const invoices = await api('GET', '/invoices', { token: tokens[Role.FINANCE] });
-    assert(invoices.status === 200, 'invoice list failed');
-    const oneTime = invoices.body.data.items.find((i: any) => i.number === 'INV-1042');
-    const recurring = invoices.body.data.items.find((i: any) => i.number === 'INV-1043');
-    assert(oneTime && recurring, 'expected both INV-1042 and INV-1043');
-    assert(oneTime.orderId === recurring.orderId, 'both invoices must belong to the same order');
-    assert(oneTime.type === 'ONE_TIME' && recurring.type === 'RECURRING', 'invoice types are wrong');
-    const oneTimeProducts = oneTime.lines.map((l: any) => l.productId);
-    assert(
-      !recurring.lines.some((l: any) => oneTimeProducts.includes(l.productId)),
-      'the recurring invoice must never repeat a one-time line',
-    );
-    const subs = await api('GET', '/subscriptions', { token: tokens[Role.FINANCE] });
-    assert(subs.body.data.counts.active === 16, `expected 16 active subscriptions, got ${subs.body.data.counts.active}`);
-    const carePlan = subs.body.data.items.find((s: any) => s.planName === 'Care Plan 2yr' && s.customerName === 'Acme Corp');
-    assert(carePlan?.schedule?.length > 0, 'the Care Plan subscription must carry a generated billing schedule');
-    assert(carePlan.nextBillDate, 'the Care Plan subscription must have a next bill date');
-    return `ORD-1041 -> ${oneTime.number} ${formatMoney(oneTime.total)} unpaid + ${recurring.number} ${formatMoney(recurring.total)} recurring; ${carePlan.schedule.length} scheduled periods`;
-  });
+  await step(
+    6,
+    'One order produces a one-time invoice AND a separate recurring schedule',
+    'D',
+    async () => {
+      const invoices = await api('GET', '/invoices', { token: tokens[Role.FINANCE] });
+      assert(invoices.status === 200, 'invoice list failed');
+      const oneTime = invoices.body.data.items.find((i: any) => i.number === 'INV-1042');
+      const recurring = invoices.body.data.items.find((i: any) => i.number === 'INV-1043');
+      assert(oneTime && recurring, 'expected both INV-1042 and INV-1043');
+      assert(oneTime.orderId === recurring.orderId, 'both invoices must belong to the same order');
+      assert(
+        oneTime.type === 'ONE_TIME' && recurring.type === 'RECURRING',
+        'invoice types are wrong',
+      );
+      const oneTimeProducts = oneTime.lines.map((l: any) => l.productId);
+      assert(
+        !recurring.lines.some((l: any) => oneTimeProducts.includes(l.productId)),
+        'the recurring invoice must never repeat a one-time line',
+      );
+      const subs = await api('GET', '/subscriptions', { token: tokens[Role.FINANCE] });
+      assert(
+        subs.body.data.counts.active === 16,
+        `expected 16 active subscriptions, got ${subs.body.data.counts.active}`,
+      );
+      const carePlan = subs.body.data.items.find(
+        (s: any) => s.planName === 'Care Plan 2yr' && s.customerName === 'Acme Corp',
+      );
+      assert(
+        carePlan?.schedule?.length > 0,
+        'the Care Plan subscription must carry a generated billing schedule',
+      );
+      assert(carePlan.nextBillDate, 'the Care Plan subscription must have a next bill date');
+      return `ORD-1041 -> ${oneTime.number} ${formatMoney(oneTime.total)} unpaid + ${recurring.number} ${formatMoney(recurring.total)} recurring; ${carePlan.schedule.length} scheduled periods`;
+    },
+  );
 
   /* ---- 7. The portal, and the negative auth test ---- */
   await step(7, 'The customer portal is a genuinely restricted surface', 'C', async () => {
     // Priya's magic link opens exactly her quotation.
     const priya = await api('GET', '/portal/q/Q-1042', { portalToken: PRIYA_PORTAL_TOKEN });
-    assert(priya.status === 200, `Priya could not open her own quotation: ${priya.body.error?.message}`);
+    assert(
+      priya.status === 200,
+      `Priya could not open her own quotation: ${priya.body.error?.message}`,
+    );
     assert(priya.body.data.quotation.number === 'Q-1042', 'wrong quotation resolved');
 
     // R. Das, logged in as himself, must NOT be able to reach it.
@@ -257,7 +350,9 @@ async function main(): Promise<void> {
     assert(rep.status === 403, `an internal JWT should not open the portal, got ${rep.status}`);
 
     // An expired link is rejected with its own error code.
-    const expired = await api('GET', '/portal/q/Q-1042', { portalToken: 'demo-acme-q1042-expired-000000000' });
+    const expired = await api('GET', '/portal/q/Q-1042', {
+      portalToken: 'demo-acme-q1042-expired-000000000',
+    });
     assert(
       expired.status === 403 && expired.body.error?.code === 'PORTAL_TOKEN_EXPIRED',
       `an expired link should return PORTAL_TOKEN_EXPIRED, got ${expired.body.error?.code}`,
@@ -266,17 +361,31 @@ async function main(): Promise<void> {
   });
 
   /* ---- 8. Counter-offer re-enters approval automatically ---- */
-  await step(8, 'A customer counter-offer sends the quote back for approval automatically', 'C', async () => {
-    const res = await api('POST', '/portal/q/Q-1042/counter', {
-      portalToken: PRIYA_PORTAL_TOKEN,
-      body: { lines: [{ lineId: 'Q-1042-L2', counterDiscountPct: 25 }], note: 'Can you do better on the setup fee?' },
-    });
-    expectBuilt(res, 'C', 'POST /portal/q/:number/counter');
-    assert(res.status === 200, `counter failed: ${res.body.error?.message}`);
-    assert(res.body.data.reEnteredApproval === true, 'a breaching counter must re-enter the approval chain');
-    assert(res.body.data.quotation.stage === 'PENDING_APPROVAL', 'the quote should be back at PENDING_APPROVAL');
-    return `counter accepted; risk recomputed to ${res.body.data.risk.riskScore}; quote re-entered approval`;
-  });
+  await step(
+    8,
+    'A customer counter-offer sends the quote back for approval automatically',
+    'C',
+    async () => {
+      const res = await api('POST', '/portal/q/Q-1042/counter', {
+        portalToken: PRIYA_PORTAL_TOKEN,
+        body: {
+          lines: [{ lineId: 'Q-1042-L2', counterDiscountPct: 25 }],
+          note: 'Can you do better on the setup fee?',
+        },
+      });
+      expectBuilt(res, 'C', 'POST /portal/q/:number/counter');
+      assert(res.status === 200, `counter failed: ${res.body.error?.message}`);
+      assert(
+        res.body.data.reEnteredApproval === true,
+        'a breaching counter must re-enter the approval chain',
+      );
+      assert(
+        res.body.data.quotation.stage === 'PENDING_APPROVAL',
+        'the quote should be back at PENDING_APPROVAL',
+      );
+      return `counter accepted; risk recomputed to ${res.body.data.risk.riskScore}; quote re-entered approval`;
+    },
+  );
 
   /* ---- 9. Record a payment ---- */
   await step(9, 'Recording a payment advances the invoice and the order stepper', 'D', async () => {
@@ -284,7 +393,11 @@ async function main(): Promise<void> {
     assert(invoice.status === 200, 'invoice detail failed');
     const res = await api('POST', `/invoices/${invoice.body.data.invoice.id}/payments`, {
       token: tokens[Role.FINANCE],
-      body: { amount: invoice.body.data.invoice.amountDue, method: 'BANK_TRANSFER', reference: 'SMOKE-001' },
+      body: {
+        amount: invoice.body.data.invoice.amountDue,
+        method: 'BANK_TRANSFER',
+        reference: 'SMOKE-001',
+      },
     });
     expectBuilt(res, 'D', 'POST /invoices/:id/payments');
     assert(res.status === 200 || res.status === 201, `payment failed: ${res.body.error?.message}`);
@@ -299,7 +412,10 @@ async function main(): Promise<void> {
     assert(res.body.data.stalledDeals >= 1, 'expected at least one stalled deal');
     assert(res.body.data.discountAnomalies >= 1, 'expected at least one discount anomaly');
     const q1030 = res.body.data.alerts.find((a: any) => a.quotationNumber === 'Q-1030');
-    assert(q1030?.issue === 'idle 9 days', `Q-1030 should read "idle 9 days", got "${q1030?.issue}"`);
+    assert(
+      q1030?.issue === 'idle 9 days',
+      `Q-1030 should read "idle 9 days", got "${q1030?.issue}"`,
+    );
     return `${res.body.data.stalledDeals} stalled · ${res.body.data.discountAnomalies} anomalies · ${res.body.data.deliverySlippage} slipping`;
   });
 
@@ -307,47 +423,208 @@ async function main(): Promise<void> {
   await step(11, 'Reporting KPIs aggregate from real documents', 'D', async () => {
     const res = await api('GET', '/reporting?period=month', { token: tokens[Role.ADMIN] });
     assert(res.status === 200, 'reporting failed');
-    assert(res.body.data.quotesCreated > 100, `expected a month of quotes, got ${res.body.data.quotesCreated}`);
+    assert(
+      res.body.data.quotesCreated > 100,
+      `expected a month of quotes, got ${res.body.data.quotesCreated}`,
+    );
     assert(res.body.data.avgApprovalTimeMs > 0, 'expected a real average approval time');
     assert(res.body.data.topUpsellProduct, 'expected a top upsell product');
     return `${res.body.data.quotesCreated} quotes · avg approval ${res.body.data.avgApprovalTimeLabel} · top upsell ${res.body.data.topUpsellProduct.name}`;
   });
 
   /* ---- 12. Changing a ceiling changes behaviour live ---- */
-  await step(12, 'Changing a discount ceiling re-evaluates open quotations immediately', 'A', async () => {
-    const before = await api('GET', '/quotations?q=Q-1042', { token: tokens[Role.ADMIN] });
-    const beforeQuote = before.body.data.find((q: any) => q.number === 'Q-1042');
-    const beforeScore = beforeQuote.risk.riskScore;
-    // Step 8 (the portal counter-offer loop) may already have raised a line's own
-    // discount above its seeded value, so the ceiling this test raises to must
-    // cover whatever Q-1042's CURRENT terms are — not the value it happened to
-    // carry when this test was first written — to prove the point regardless of
-    // run order: a live ceiling change re-evaluates every open quotation.
-    const coveringCeiling = Math.max(20, ...beforeQuote.lines.map((l: any) => l.discountPct));
+  await step(
+    12,
+    'Changing a discount ceiling re-evaluates open quotations immediately',
+    'A',
+    async () => {
+      const before = await api('GET', '/quotations?q=Q-1042', { token: tokens[Role.ADMIN] });
+      const beforeQuote = before.body.data.find((q: any) => q.number === 'Q-1042');
+      const beforeScore = beforeQuote.risk.riskScore;
+      // Step 8 (the portal counter-offer loop) may already have raised a line's own
+      // discount above its seeded value, so the ceiling this test raises to must
+      // cover whatever Q-1042's CURRENT terms are — not the value it happened to
+      // carry when this test was first written — to prove the point regardless of
+      // run order: a live ceiling change re-evaluates every open quotation.
+      const coveringCeiling = Math.max(20, ...beforeQuote.lines.map((l: any) => l.discountPct));
 
-    const res = await api('PUT', '/config', {
-      token: tokens[Role.ADMIN],
-      body: {
-        tierCeilings: { GOLD: coveringCeiling },
-        categoryCeilings: { SERVICES: coveringCeiling },
-        reason: 'Smoke test: prove the risk engine is configuration-driven, not hardcoded',
-      },
+      const res = await api('PUT', '/config', {
+        token: tokens[Role.ADMIN],
+        body: {
+          tierCeilings: { GOLD: coveringCeiling },
+          categoryCeilings: { SERVICES: coveringCeiling },
+          reason: 'Smoke test: prove the risk engine is configuration-driven, not hardcoded',
+        },
+      });
+      assert(res.status === 200, `config update failed: ${res.body.error?.message}`);
+      const impact = res.body.data.reevaluated.find((r: any) => r.quotationNumber === 'Q-1042');
+      assert(impact, 'Q-1042 should have been re-evaluated');
+      assert(
+        impact.previousScore === beforeScore && impact.newScore === 0,
+        `expected ${beforeScore} -> 0, got ${impact.previousScore} -> ${impact.newScore}`,
+      );
+      assert(
+        impact.autoApproved === true,
+        'Q-1042 should have auto-approved once it was inside its limits',
+      );
+
+      // Put it back, so the demo database is left exactly as it was found.
+      await api('PUT', '/config', {
+        token: tokens[Role.ADMIN],
+        body: {
+          tierCeilings: { GOLD: 15 },
+          categoryCeilings: { SERVICES: 10 },
+          reason: 'Smoke test: restore baseline',
+        },
+      });
+      return `${res.body.data.reevaluated.length} quotations re-scored live; Q-1042 went ${beforeScore} -> 0 and auto-approved`;
+    },
+  );
+
+  /* ---- 13. Restock ⇒ the backordered order becomes consolidatable ---- */
+  await step(
+    13,
+    'Restocking a warehouse flips a covered backorder to consolidation-available',
+    'D',
+    async () => {
+      const overview = await api('GET', '/fulfillment', { token: tokens[Role.FINANCE] });
+      assert(overview.status === 200, 'fulfillment overview failed');
+      const backorder = overview.body.data.awaiting.find((a: any) => a.status === 'BACKORDER');
+      assert(backorder, 'expected an order sitting on backorder');
+
+      const detail = await api('GET', `/fulfillment/${backorder.fulfillmentId}`, {
+        token: tokens[Role.FINANCE],
+      });
+      assert(
+        detail.status === 200 && detail.body.data.backorders.length > 0,
+        'the backorder detail should list short lines',
+      );
+      const short = detail.body.data.backorders[0];
+
+      const before = await api('GET', `/fulfillment/${backorder.fulfillmentId}/consolidation`, {
+        token: tokens[Role.FINANCE],
+      });
+      assert(
+        before.status === 200 && before.body.data.available === false,
+        'nothing should be consolidatable before the restock',
+      );
+
+      const warehouses = await api('GET', '/warehouses', { token: tokens[Role.FINANCE] });
+      const east = warehouses.body.data.find((w: any) => w.name === 'East Depot');
+      assert(east, 'East Depot not found');
+
+      const totalShort = detail.body.data.backorders.reduce((a: number, b: any) => a + b.qty, 0);
+      const adjust = await api('POST', '/stock/adjust', {
+        token: tokens[Role.FINANCE],
+        body: {
+          warehouseId: east.id,
+          productId: short.productId,
+          delta: totalShort,
+          reason: 'Smoke test: restock to cover the outstanding backorder',
+        },
+      });
+      expectBuilt(adjust, 'D', 'POST /stock/adjust');
+      assert(adjust.status === 200, `stock adjust failed: ${adjust.body.error?.message}`);
+      assert(
+        adjust.body.data.consolidationAvailableFor.includes(backorder.orderNumber),
+        `${backorder.orderNumber} should be flagged consolidation-available after the restock`,
+      );
+
+      const after = await api('GET', `/fulfillment/${backorder.fulfillmentId}/consolidation`, {
+        token: tokens[Role.FINANCE],
+      });
+      assert(
+        after.status === 200 && after.body.data.available === true,
+        'the backorder should now be consolidatable',
+      );
+      return `${backorder.orderNumber}: +${totalShort} restocked at East Depot ⇒ consolidation prompt is live`;
+    },
+  );
+
+  /* ---- 14. The notification centre: escalate writes one, "mark all read" clears it ---- */
+  await step(
+    14,
+    'An escalation notifies its recipient, and "mark all read" clears the badge',
+    'C',
+    async () => {
+      const alerts = await api('GET', '/deal-health', { token: tokens[Role.SALES_MANAGER] });
+      assert(
+        alerts.status === 200 && alerts.body.data.alerts.length > 0,
+        'expected at least one deal alert to act on',
+      );
+      const alert = alerts.body.data.alerts[0];
+
+      const escalate = await api('POST', `/deal-health/${alert.id}/escalate`, {
+        token: tokens[Role.SALES_MANAGER],
+        body: { note: 'Smoke test: escalate to exercise the notification centre' },
+      });
+      expectBuilt(escalate, 'D', 'POST /deal-health/:id/escalate');
+      assert(escalate.status === 200, `escalate failed: ${escalate.body.error?.message}`);
+
+      const unread = await api('GET', '/notifications', { token: tokens[Role.SALES_MANAGER] });
+      expectBuilt(unread, 'C', 'GET /notifications');
+      assert(unread.status === 200, `notifications list failed: ${unread.body.error?.message}`);
+      assert(
+        unread.body.data.unreadCount >= 1,
+        `expected an unread notification, got ${unread.body.data.unreadCount}`,
+      );
+      assert(
+        unread.body.data.items.every((n: any) => n.userId),
+        'every notification must be scoped to a user',
+      );
+
+      const readAll = await api('POST', '/notifications/read-all', {
+        token: tokens[Role.SALES_MANAGER],
+      });
+      expectBuilt(readAll, 'C', 'POST /notifications/read-all');
+      assert(
+        readAll.status === 200 && readAll.body.data.updated >= 1,
+        'read-all should mark at least one notification read',
+      );
+
+      const cleared = await api('GET', '/notifications', { token: tokens[Role.SALES_MANAGER] });
+      assert(
+        cleared.body.data.unreadCount === 0,
+        `unread count should be 0 after read-all, got ${cleared.body.data.unreadCount}`,
+      );
+      return `escalation ⇒ 1 unread for the manager; read-all cleared ${readAll.body.data.updated}`;
+    },
+  );
+
+  /* ---- 15. Reissuing a customer link revokes the old one ---- */
+  await step(15, 'Reissuing the customer portal link revokes every earlier link', 'C', async () => {
+    const list = await api('GET', '/quotations?q=Q-1042', { token: tokens[Role.SALES_REP] });
+    const q = list.body.data.find((x: any) => x.number === 'Q-1042');
+    assert(q, 'Q-1042 not found');
+
+    // The seeded link still works right now.
+    const beforeOld = await api('GET', '/portal/q/Q-1042', { portalToken: PRIYA_PORTAL_TOKEN });
+    assert(beforeOld.status === 200, 'the seeded link should still work before the reissue');
+
+    const reissue = await api('POST', `/quotations/${q.id}/portal-link`, {
+      token: tokens[Role.SALES_REP],
+      body: { reason: 'Smoke test: reissue the customer link' },
     });
-    assert(res.status === 200, `config update failed: ${res.body.error?.message}`);
-    const impact = res.body.data.reevaluated.find((r: any) => r.quotationNumber === 'Q-1042');
-    assert(impact, 'Q-1042 should have been re-evaluated');
+    expectBuilt(reissue, 'C', 'POST /quotations/:id/portal-link');
+    assert(reissue.status === 200, `reissue failed: ${reissue.body.error?.message}`);
+    assert(reissue.body.data.revokedCount >= 1, 'the reissue should have revoked the seeded link');
     assert(
-      impact.previousScore === beforeScore && impact.newScore === 0,
-      `expected ${beforeScore} -> 0, got ${impact.previousScore} -> ${impact.newScore}`,
+      reissue.body.data.token && reissue.body.data.url.includes('token='),
+      'the reissue must return a usable link',
     );
-    assert(impact.autoApproved === true, 'Q-1042 should have auto-approved once it was inside its limits');
 
-    // Put it back, so the demo database is left exactly as it was found.
-    await api('PUT', '/config', {
-      token: tokens[Role.ADMIN],
-      body: { tierCeilings: { GOLD: 15 }, categoryCeilings: { SERVICES: 10 }, reason: 'Smoke test: restore baseline' },
-    });
-    return `${res.body.data.reevaluated.length} quotations re-scored live; Q-1042 went ${beforeScore} -> 0 and auto-approved`;
+    const afterOld = await api('GET', '/portal/q/Q-1042', { portalToken: PRIYA_PORTAL_TOKEN });
+    assert(
+      afterOld.status === 403,
+      `the old link should be dead after a reissue, got ${afterOld.status}`,
+    );
+
+    const afterNew = await api('GET', '/portal/q/Q-1042', { portalToken: reissue.body.data.token });
+    assert(
+      afterNew.status === 200,
+      `the new link should open the quotation, got ${afterNew.status}`,
+    );
+    return `old link 403 · new link 200 · ${reissue.body.data.revokedCount} revoked`;
   });
 
   /* ------------------------------------------------------------------ report */
@@ -360,7 +637,9 @@ async function main(): Promise<void> {
   const pending = results.filter((r) => r.status === 'PENDING');
   const fail = results.filter((r) => r.status === 'FAIL');
 
-  log.banner(`Smoke: ${pass} passing · ${pending.length} awaiting an agent · ${fail.length} failing`);
+  log.banner(
+    `Smoke: ${pass} passing · ${pending.length} awaiting an agent · ${fail.length} failing`,
+  );
 
   if (pending.length > 0) {
     console.log('\nStill to build:');

@@ -18,7 +18,7 @@ import { requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { invalidState, notFound } from '../../utils/apiError.js';
-import { ok } from '../../utils/respond.js';
+import { ok, paginate } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
 import { mountModuleHealth } from '../module.health.js';
@@ -26,10 +26,16 @@ import { mountModuleHealth } from '../module.health.js';
 export const subscriptionsRouter = Router();
 
 mountModuleHealth(subscriptionsRouter, {
-  module: 'subscriptions', owner: 'D', screens: [9, 10],
+  module: 'subscriptions',
+  owner: 'D',
+  screens: [9, 10],
   implemented: [
-    'GET / (with active/paused/cancelled chips)', 'GET /:id',
-    'POST /:id/modify', 'POST /:id/cancel', 'POST /:id/pause', 'POST /:id/resume',
+    'GET / (with active/paused/cancelled chips)',
+    'GET /:id',
+    'POST /:id/modify',
+    'POST /:id/cancel',
+    'POST /:id/pause',
+    'POST /:id/resume',
   ],
   todo: [],
 });
@@ -40,17 +46,27 @@ subscriptionsRouter.get(
   '/',
   requireAuth(FINANCE_VIEW),
   asyncHandler(async (req, res) => {
+    const page = Math.max(1, Number(req.query.page ?? 1));
+    const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize ?? 50)));
     const filter: Record<string, unknown> = {};
     if (req.query.status) filter.status = req.query.status;
     if (req.query.customerId) filter.customerId = req.query.customerId;
-    const [items, active, paused, cancelled] = await Promise.all([
-      Subscription.find(filter).sort({ nextBillDate: 1, customerName: 1 }).limit(200).lean(),
+    const [items, total, active, paused, cancelled] = await Promise.all([
+      Subscription.find(filter)
+        .sort({ nextBillDate: 1, customerName: 1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean(),
+      Subscription.countDocuments(filter),
       Subscription.countDocuments({ status: SubscriptionStatus.ACTIVE }),
       Subscription.countDocuments({ status: SubscriptionStatus.PAUSED }),
       Subscription.countDocuments({ status: SubscriptionStatus.CANCELLED }),
     ]);
-    const payload: SubscriptionListDto = { counts: { active, paused, cancelled }, items: toDtoList(items) };
-    ok(res, payload);
+    const payload: SubscriptionListDto = {
+      counts: { active, paused, cancelled },
+      items: toDtoList(items),
+    };
+    ok(res, payload, paginate([], page, pageSize, total));
   }),
 );
 
@@ -75,7 +91,10 @@ function currentPeriod(schedule: any[], now: Date) {
 }
 
 function nextUnbilledPeriod(schedule: any[], now: Date) {
-  return schedule.find((s) => !s.invoiced && new Date(s.periodStart) >= now) ?? schedule.find((s) => !s.invoiced);
+  return (
+    schedule.find((s) => !s.invoiced && new Date(s.periodStart) >= now) ??
+    schedule.find((s) => !s.invoiced)
+  );
 }
 
 const modifySchema = z.object({
@@ -92,7 +111,8 @@ subscriptionsRouter.post(
   asyncHandler(async (req, res) => {
     const sub: any = await Subscription.findById(req.params.id);
     if (!sub) throw notFound(`No subscription ${req.params.id}`);
-    if (sub.status === SubscriptionStatus.CANCELLED) throw invalidState('A cancelled subscription cannot be modified.');
+    if (sub.status === SubscriptionStatus.CANCELLED)
+      throw invalidState('A cancelled subscription cannot be modified.');
 
     const body = req.body as ModifySubscriptionRequest;
     const now = body.effectiveDate ? new Date(body.effectiveDate) : new Date();
@@ -113,14 +133,24 @@ subscriptionsRouter.post(
     const oldAmount = sub.amount;
 
     const period = currentPeriod(sub.schedule, now);
-    const proration = prorateFromDates(oldAmount, newAmount, now, period.periodStart, sub.cycle, sub.prorationRule);
+    const proration = prorateFromDates(
+      oldAmount,
+      newAmount,
+      now,
+      period.periodStart,
+      sub.cycle,
+      sub.prorationRule,
+    );
 
     let creditNote: any = null;
     if (proration.net < 0) {
       creditNote = await CreditNote.create({
         number: `CN-${await nextSeq('creditnote', 2000)}`,
-        customerId: sub.customerId, customerName: sub.customerName,
-        subscriptionId: sub._id, amount: -proration.net, currency: sub.currency,
+        customerId: sub.customerId,
+        customerName: sub.customerName,
+        subscriptionId: sub._id,
+        amount: -proration.net,
+        currency: sub.currency,
         reason: `Proration credit from modifying ${sub.number}: ${body.reason}`,
       });
     }
@@ -153,14 +183,22 @@ subscriptionsRouter.post(
 
     const payload: ModifySubscriptionResponse = {
       subscription: toDto(sub),
-      proration: { credit: proration.credit, charge: proration.charge, net: proration.net, explanation: proration.explanation },
+      proration: {
+        credit: proration.credit,
+        charge: proration.charge,
+        net: proration.net,
+        explanation: proration.explanation,
+      },
       creditNote: creditNote ? toDto(creditNote) : null,
     };
     ok(res, payload);
   }),
 );
 
-const cancelSchema = z.object({ reason: z.string().trim().min(1, 'A reason is required.'), effectiveDate: z.string().optional() });
+const cancelSchema = z.object({
+  reason: z.string().trim().min(1, 'A reason is required.'),
+  effectiveDate: z.string().optional(),
+});
 
 subscriptionsRouter.post(
   '/:id/cancel',
@@ -169,21 +207,31 @@ subscriptionsRouter.post(
   asyncHandler(async (req, res) => {
     const sub: any = await Subscription.findById(req.params.id);
     if (!sub) throw notFound(`No subscription ${req.params.id}`);
-    if (sub.status === SubscriptionStatus.CANCELLED) throw invalidState('This subscription is already cancelled.');
+    if (sub.status === SubscriptionStatus.CANCELLED)
+      throw invalidState('This subscription is already cancelled.');
 
     const body = req.body as CancelSubscriptionRequest;
     const now = body.effectiveDate ? new Date(body.effectiveDate) : new Date();
     const actor = { id: req.user!.id, name: req.user!.name, role: req.user!.role };
 
     const period = currentPeriod(sub.schedule, now);
-    const settlement = cancellationSettlement(sub.amount, now, period.periodStart, sub.cycle, sub.cancellationRule);
+    const settlement = cancellationSettlement(
+      sub.amount,
+      now,
+      period.periodStart,
+      sub.cycle,
+      sub.cancellationRule,
+    );
 
     let creditNote: any = null;
     if (settlement.creditAmount > 0) {
       creditNote = await CreditNote.create({
         number: `CN-${await nextSeq('creditnote', 2000)}`,
-        customerId: sub.customerId, customerName: sub.customerName,
-        subscriptionId: sub._id, amount: settlement.creditAmount, currency: sub.currency,
+        customerId: sub.customerId,
+        customerName: sub.customerName,
+        subscriptionId: sub._id,
+        amount: settlement.creditAmount,
+        currency: sub.currency,
         reason: `Cancellation credit for ${sub.number}: ${body.reason}`,
       });
     }
@@ -222,7 +270,8 @@ subscriptionsRouter.post(
   asyncHandler(async (req, res) => {
     const sub: any = await Subscription.findById(req.params.id);
     if (!sub) throw notFound(`No subscription ${req.params.id}`);
-    if (sub.status !== SubscriptionStatus.ACTIVE) throw invalidState(`Only an active subscription can be paused. This one is ${sub.status}.`);
+    if (sub.status !== SubscriptionStatus.ACTIVE)
+      throw invalidState(`Only an active subscription can be paused. This one is ${sub.status}.`);
 
     sub.status = SubscriptionStatus.PAUSED;
     const heldBillDate = sub.nextBillDate;
@@ -250,7 +299,8 @@ subscriptionsRouter.post(
   asyncHandler(async (req, res) => {
     const sub: any = await Subscription.findById(req.params.id);
     if (!sub) throw notFound(`No subscription ${req.params.id}`);
-    if (sub.status !== SubscriptionStatus.PAUSED) throw invalidState(`Only a paused subscription can be resumed. This one is ${sub.status}.`);
+    if (sub.status !== SubscriptionStatus.PAUSED)
+      throw invalidState(`Only a paused subscription can be resumed. This one is ${sub.status}.`);
 
     const now = new Date();
     const next = nextUnbilledPeriod(sub.schedule, now);

@@ -5,6 +5,7 @@
  * `POST /:id/submit`, which computes the blended risk and either
  * auto-approves the quotation or opens the approval chain.
  */
+import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { Types } from 'mongoose';
 import { z } from 'zod';
@@ -31,11 +32,21 @@ import {
   type QuotationLineInput,
   type QuotationPreviewDto,
   type QuotationSummaryDto,
+  type ReissuePortalLinkResponse,
   type SalesDashboardDto,
   type SubmitQuotationResponse,
   type UpdateQuotationRequest,
 } from '@dealflow/shared';
-import { Approval, AuditLog, Customer, DealAlert, Quotation, User, nextSeq } from '../../db/models.js';
+import {
+  Approval,
+  AuditLog,
+  Customer,
+  DealAlert,
+  PortalToken,
+  Quotation,
+  User,
+  nextSeq,
+} from '../../db/models.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
@@ -52,20 +63,38 @@ export const quotationsRouter = Router();
 const WRITE_ROLES: Role[] = [Role.SALES_REP, Role.SALES_MANAGER, Role.ADMIN];
 
 mountModuleHealth(quotationsRouter, {
-  module: 'quotations', owner: 'B', screens: [2, 3, 4],
+  module: 'quotations',
+  owner: 'B',
+  screens: [2, 3, 4],
   implemented: [
-    'GET /', 'GET /:id', 'GET /board', 'GET /dashboard', 'GET /:id/audit',
-    'POST /', 'PATCH /:id', 'POST /preview', 'POST /:id/submit',
+    'GET /',
+    'GET /:id',
+    'GET /board',
+    'GET /dashboard',
+    'GET /:id/audit',
+    'POST /',
+    'PATCH /:id',
+    'POST /preview',
+    'POST /:id/submit',
+    'POST /:id/portal-link',
   ],
   todo: [],
 });
 
+const PORTAL_LINK_TTL_DAYS = 14;
+
 function summarise(q: any): QuotationSummaryDto {
   return {
-    id: String(q._id), number: q.number, customerName: q.customerName, tier: q.tier,
-    ownerName: q.ownerName, stage: q.stage,
-    grandTotal: q.totals?.grandTotal ?? 0, currency: q.currency,
-    riskLevel: q.risk?.riskLevel ?? 'NONE', riskScore: q.risk?.riskScore ?? 0,
+    id: String(q._id),
+    number: q.number,
+    customerName: q.customerName,
+    tier: q.tier,
+    ownerName: q.ownerName,
+    stage: q.stage,
+    grandTotal: q.totals?.grandTotal ?? 0,
+    currency: q.currency,
+    riskLevel: q.risk?.riskLevel ?? 'NONE',
+    riskScore: q.risk?.riskScore ?? 0,
     lastActivityAt: q.lastActivityAt?.toISOString?.() ?? new Date(q.lastActivityAt).toISOString(),
     updatedAt: q.updatedAt?.toISOString?.() ?? new Date(q.updatedAt).toISOString(),
     lineCount: q.lines?.length ?? 0,
@@ -178,7 +207,10 @@ quotationsRouter.get(
 
     const recentActivity: ActivityItemDto[] = (activity as any[]).map((a) => ({
       id: String(a._id),
-      title: a.action.replace(/_/g, ' ').toLowerCase().replace(/^./, (c: string) => c.toUpperCase()),
+      title: a.action
+        .replace(/_/g, ' ')
+        .toLowerCase()
+        .replace(/^./, (c: string) => c.toUpperCase()),
       detail: a.reason || `${a.entityLabel ?? a.entity} updated`,
       actorName: a.actor,
       entity: a.entity,
@@ -188,7 +220,9 @@ quotationsRouter.get(
     }));
 
     const dashboard: SalesDashboardDto = {
-      pendingApprovals, openQuotations, atRiskDeals,
+      pendingApprovals,
+      openQuotations,
+      atRiskDeals,
       recentActivity,
       myQuotations: (mine as any[]).map(summarise),
     };
@@ -237,6 +271,8 @@ const previewSchema = z.object({
 
 const submitSchema = z.object({ reason: z.string().optional() }).default({});
 
+const reissueLinkSchema = z.object({ reason: z.string().trim().optional() }).default({});
+
 /** A blank draft against a customer — screen 3's "+ New Quotation". */
 quotationsRouter.post(
   '/',
@@ -266,7 +302,9 @@ quotationsRouter.post(
       totals,
       risk,
       validUntil: addDays(now, 30),
-      promisedDeliveryDate: body.promisedDeliveryDate ? new Date(body.promisedDeliveryDate) : undefined,
+      promisedDeliveryDate: body.promisedDeliveryDate
+        ? new Date(body.promisedDeliveryDate)
+        : undefined,
       lastActivityAt: now,
       version: 1,
       notes: body.notes,
@@ -317,12 +355,20 @@ quotationsRouter.patch(
       );
 
       const riskConfig = await loadRiskConfig();
-      const { tier, priced } = await priceLinesForCustomer(String(doc.customerId), inputLines, riskConfig);
+      const { tier, priced } = await priceLinesForCustomer(
+        String(doc.customerId),
+        inputLines,
+        riskConfig,
+      );
       const totals = computeQuoteTotals(priced);
       const risk = calculateBlendedRisk(
         priced.map((l) => ({
-          id: l.id, productName: l.productName, category: l.category,
-          qty: l.qty, unitPrice: l.unitPrice, discountPct: l.discountPct,
+          id: l.id,
+          productName: l.productName,
+          category: l.category,
+          qty: l.qty,
+          unitPrice: l.unitPrice,
+          discountPct: l.discountPct,
           allowedDiscountPct: l.allowedDiscountPct,
         })),
         tier,
@@ -335,7 +381,9 @@ quotationsRouter.patch(
     }
 
     if (body.promisedDeliveryDate !== undefined) {
-      doc.promisedDeliveryDate = body.promisedDeliveryDate ? new Date(body.promisedDeliveryDate) : undefined;
+      doc.promisedDeliveryDate = body.promisedDeliveryDate
+        ? new Date(body.promisedDeliveryDate)
+        : undefined;
     }
     if (body.notes !== undefined) doc.notes = body.notes;
 
@@ -377,15 +425,23 @@ quotationsRouter.post(
 
     const risk = calculateBlendedRisk(
       priced.map((l) => ({
-        id: l.id, productName: l.productName, category: l.category,
-        qty: l.qty, unitPrice: l.unitPrice, discountPct: l.discountPct,
+        id: l.id,
+        productName: l.productName,
+        category: l.category,
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+        discountPct: l.discountPct,
         allowedDiscountPct: l.allowedDiscountPct,
       })),
       tier,
       riskConfig,
     );
 
-    const payload: QuotationPreviewDto = { lines: priced as any, totals: computeQuoteTotals(priced), risk };
+    const payload: QuotationPreviewDto = {
+      lines: priced as any,
+      totals: computeQuoteTotals(priced),
+      risk,
+    };
     ok(res, payload);
   }),
 );
@@ -431,11 +487,17 @@ quotationsRouter.post(
       selectedVariants: l.selectedVariants,
       addedFromUpsell: l.addedFromUpsell,
     }));
-    const priced: PricedLine[] = linesInput.map((line) => computeLinePricing(line, doc.tier, riskConfig));
+    const priced: PricedLine[] = linesInput.map((line) =>
+      computeLinePricing(line, doc.tier, riskConfig),
+    );
     const risk = calculateBlendedRisk(
       priced.map((l) => ({
-        id: l.id, productName: l.productName, category: l.category,
-        qty: l.qty, unitPrice: l.unitPrice, discountPct: l.discountPct,
+        id: l.id,
+        productName: l.productName,
+        category: l.category,
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+        discountPct: l.discountPct,
         allowedDiscountPct: l.allowedDiscountPct,
       })),
       doc.tier,
@@ -452,12 +514,19 @@ quotationsRouter.post(
 
     const existing = doc.approvalId ? await Approval.findById(doc.approvalId) : null;
     const isResubmit = !!existing && existing.status === ApprovalStatus.RETURNED;
-    const approval = isResubmit ? existing! : new Approval({
-      quotationId: doc._id, quotationNumber: doc.number,
-      customerId: doc.customerId, customerName: doc.customerName, tier: doc.tier,
-      ownerId: doc.ownerId, ownerName: doc.ownerName, currency: doc.currency,
-      trail: [],
-    });
+    const approval = isResubmit
+      ? existing!
+      : new Approval({
+          quotationId: doc._id,
+          quotationNumber: doc.number,
+          customerId: doc.customerId,
+          customerName: doc.customerName,
+          tier: doc.tier,
+          ownerId: doc.ownerId,
+          ownerName: doc.ownerName,
+          currency: doc.currency,
+          trail: [],
+        });
 
     approval.amount = doc.totals.grandTotal;
     approval.risk = risk as any;
@@ -481,7 +550,9 @@ quotationsRouter.post(
       approval.currentStage = undefined;
       approval.assignedToName = undefined;
       approval.decidedAt = now;
-      approval.cycleTimeMs = approval.submittedAt ? now.getTime() - approval.submittedAt.getTime() : 0;
+      approval.cycleTimeMs = approval.submittedAt
+        ? now.getTime() - approval.submittedAt.getTime()
+        : 0;
     } else {
       approval.status = ApprovalStatus.PENDING;
       approval.steps = risk.requiredChain.map((role, i) => ({
@@ -496,7 +567,14 @@ quotationsRouter.post(
       approval.reEnteredFromNegotiation = false;
     }
     approval.submittedAt = approval.submittedAt ?? now;
-    approval.trail.push({ actorId: actor.id as any, actorName: actor.name, role: actor.role, action, reason, at: now } as any);
+    approval.trail.push({
+      actorId: actor.id as any,
+      actorName: actor.name,
+      role: actor.role,
+      action,
+      reason,
+      at: now,
+    } as any);
     await approval.save();
 
     doc.approvalId = approval._id;
@@ -521,6 +599,75 @@ quotationsRouter.post(
       approval: autoApproved ? null : toDto(approval),
       autoApproved,
       risk,
+    };
+    ok(res, payload);
+  }),
+);
+
+/**
+ * Reissue the customer's magic link. USER_FLOWS §E11: an expired link tells the
+ * customer to "ask your account manager for a new one" — this is that. Every
+ * live token for the quotation is revoked and a single fresh one is minted, so
+ * an old link cannot keep working alongside the new one.
+ */
+quotationsRouter.post(
+  '/:id/portal-link',
+  requireAuth(WRITE_ROLES),
+  validate(reissueLinkSchema),
+  asyncHandler(async (req, res) => {
+    const doc = await Quotation.findById(req.params.id);
+    if (!doc) throw notFound(`No quotation with id ${req.params.id}`);
+    if (
+      ([QuoteStage.DRAFT, QuoteStage.REJECTED] as QuoteStage[]).includes(doc.stage as QuoteStage)
+    ) {
+      throw invalidState(
+        `A customer link only makes sense once a quotation has been sent. This one is ${STAGE_LABEL[doc.stage as QuoteStage]}.`,
+      );
+    }
+
+    const portalUser = await User.findOne({
+      customerId: doc.customerId,
+      role: Role.CUSTOMER,
+      active: true,
+    }).lean();
+    if (!portalUser) {
+      throw invalidState(
+        `${doc.customerName} has no portal contact configured, so a link cannot be issued.`,
+      );
+    }
+
+    const now = new Date();
+    const revoked = await PortalToken.updateMany(
+      { quotationId: doc._id, revoked: false },
+      { $set: { revoked: true } },
+    );
+
+    const token = `link-${randomUUID().replace(/-/g, '')}`;
+    const expiresAt = addDays(now, PORTAL_LINK_TTL_DAYS);
+    await PortalToken.create({
+      token,
+      quotationId: doc._id,
+      customerId: doc.customerId,
+      userId: (portalUser as any)._id,
+      expiresAt,
+    });
+
+    const { reason } = req.body as { reason?: string };
+    await writeAudit({
+      actor: { id: req.user!.id, name: req.user!.name, role: req.user!.role },
+      action: 'PORTAL_LINK_REISSUED',
+      entity: AuditEntity.QUOTATION,
+      entityId: String(doc._id),
+      entityLabel: doc.number,
+      after: { revokedCount: revoked.modifiedCount ?? 0, expiresAt: expiresAt.toISOString() },
+      reason: reason?.trim() || 'Customer portal link reissued',
+    });
+
+    const payload: ReissuePortalLinkResponse = {
+      token,
+      url: `/portal/q/${doc.number}?token=${token}`,
+      expiresAt: expiresAt.toISOString(),
+      revokedCount: revoked.modifiedCount ?? 0,
     };
     ok(res, payload);
   }),
@@ -551,11 +698,18 @@ quotationsRouter.get(
     }
     const q = req.query.q as string | undefined;
     if (q) {
-      filter.$or = [{ number: { $regex: q, $options: 'i' } }, { customerName: { $regex: q, $options: 'i' } }];
+      filter.$or = [
+        { number: { $regex: q, $options: 'i' } },
+        { customerName: { $regex: q, $options: 'i' } },
+      ];
     }
 
     const [items, total] = await Promise.all([
-      Quotation.find(filter).sort({ lastActivityAt: -1 }).skip((page - 1) * pageSize).limit(pageSize).lean(),
+      Quotation.find(filter)
+        .sort({ lastActivityAt: -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean(),
       Quotation.countDocuments(filter),
     ]);
     ok(res, items.map(toQuotationDto), paginate([], page, pageSize, total));

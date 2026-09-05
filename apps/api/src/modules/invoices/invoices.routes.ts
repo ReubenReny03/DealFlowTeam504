@@ -18,7 +18,7 @@ import { requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { badRequest, invalidState, notFound } from '../../utils/apiError.js';
-import { ok } from '../../utils/respond.js';
+import { ok, paginate } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
 import { toCsv } from '../../utils/csv.js';
@@ -28,10 +28,15 @@ import { loadConfig } from '../config/config.service.js';
 export const invoicesRouter = Router();
 
 mountModuleHealth(invoicesRouter, {
-  module: 'invoices', owner: 'D', screens: [12, 13],
+  module: 'invoices',
+  owner: 'D',
+  screens: [12, 13],
   implemented: [
-    'GET / (with unpaid/paid chips)', 'GET /:id (with the order stepper)',
-    'POST /:id/payments', 'POST /generate/:orderId', 'GET /:id/summary.csv',
+    'GET / (with unpaid/paid chips)',
+    'GET /:id (with the order stepper)',
+    'POST /:id/payments',
+    'POST /generate/:orderId',
+    'GET /:id/summary.csv',
   ],
   todo: [],
 });
@@ -42,17 +47,26 @@ invoicesRouter.get(
   '/',
   requireAuth(FINANCE_VIEW),
   asyncHandler(async (req, res) => {
+    const page = Math.max(1, Number(req.query.page ?? 1));
+    const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize ?? 50)));
     const filter: Record<string, unknown> = {};
     if (req.query.status) filter.status = req.query.status;
     if (req.query.customerId) filter.customerId = req.query.customerId;
-    const [items, unpaid, paid, overdue] = await Promise.all([
-      Invoice.find(filter).sort({ issueDate: -1 }).limit(200).lean(),
-      Invoice.countDocuments({ status: { $in: [InvoiceStatus.ISSUED, InvoiceStatus.PARTIALLY_PAID] } }),
+    const [items, total, unpaid, paid, overdue] = await Promise.all([
+      Invoice.find(filter)
+        .sort({ issueDate: -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean(),
+      Invoice.countDocuments(filter),
+      Invoice.countDocuments({
+        status: { $in: [InvoiceStatus.ISSUED, InvoiceStatus.PARTIALLY_PAID] },
+      }),
       Invoice.countDocuments({ status: InvoiceStatus.PAID }),
       Invoice.countDocuments({ status: InvoiceStatus.OVERDUE }),
     ]);
     const payload: InvoiceListDto = { counts: { unpaid, paid, overdue }, items: toDtoList(items) };
-    ok(res, payload);
+    ok(res, payload, paginate([], page, pageSize, total));
   }),
 );
 
@@ -61,7 +75,10 @@ invoicesRouter.get(
   requireAuth(FINANCE_VIEW),
   asyncHandler(async (req, res) => {
     const invoice: any = await Invoice.findOne({
-      $or: [{ number: req.params.id }, ...(req.params.id.match(/^[0-9a-f]{24}$/i) ? [{ _id: req.params.id }] : [])],
+      $or: [
+        { number: req.params.id },
+        ...(req.params.id.match(/^[0-9a-f]{24}$/i) ? [{ _id: req.params.id }] : []),
+      ],
     }).lean();
     if (!invoice) throw notFound(`No invoice ${req.params.id}`);
     const [order, related] = await Promise.all([
@@ -70,7 +87,11 @@ invoicesRouter.get(
     ]);
     // Screen 13 shows the one-time and the recurring invoice for the same order
     // side by side — the proof that one order produced two billing artefacts.
-    ok(res, { invoice: toDto(invoice), order: order ? toDto(order) : null, relatedInvoices: toDtoList(related) });
+    ok(res, {
+      invoice: toDto(invoice),
+      order: order ? toDto(order) : null,
+      relatedInvoices: toDtoList(related),
+    });
   }),
 );
 
@@ -79,7 +100,10 @@ invoicesRouter.get(
   requireAuth(FINANCE_VIEW),
   asyncHandler(async (req, res) => {
     const invoice: any = await Invoice.findOne({
-      $or: [{ number: req.params.id }, ...(req.params.id.match(/^[0-9a-f]{24}$/i) ? [{ _id: req.params.id }] : [])],
+      $or: [
+        { number: req.params.id },
+        ...(req.params.id.match(/^[0-9a-f]{24}$/i) ? [{ _id: req.params.id }] : []),
+      ],
     }).lean();
     if (!invoice) throw notFound(`No invoice ${req.params.id}`);
 
@@ -92,7 +116,15 @@ invoicesRouter.get(
       ['Due Date', new Date(invoice.dueDate).toISOString().slice(0, 10)],
       [],
       ['Description', 'Qty', 'Unit Price', 'Discount %', 'Net', 'Tax', 'Total'],
-      ...invoice.lines.map((l: any) => [l.description, l.qty, l.unitPrice, l.discountPct, l.net, l.tax, l.total]),
+      ...invoice.lines.map((l: any) => [
+        l.description,
+        l.qty,
+        l.unitPrice,
+        l.discountPct,
+        l.net,
+        l.tax,
+        l.total,
+      ]),
       [],
       ['Subtotal', invoice.subtotal],
       ['Tax Total', invoice.taxTotal],
@@ -126,14 +158,23 @@ invoicesRouter.post(
 
     const billable = invoiceableOneTimeLines(
       (order.lines as any[]).map((l) => ({
-        lineId: l.lineId, productId: String(l.productId), description: l.productName,
-        qty: l.qty, qtyShipped: l.qtyShipped, qtyInvoiced: l.qtyInvoiced,
-        unitPrice: l.unitPrice, discountPct: l.discountPct, taxPct: l.taxPct,
+        lineId: l.lineId,
+        productId: String(l.productId),
+        description: l.productName,
+        qty: l.qty,
+        qtyShipped: l.qtyShipped,
+        qtyInvoiced: l.qtyInvoiced,
+        unitPrice: l.unitPrice,
+        discountPct: l.discountPct,
+        taxPct: l.taxPct,
         isSubscription: l.isSubscription,
       })),
     );
     if (billable.length === 0) {
-      return ok(res, { invoice: null, message: 'Nothing new to invoice — every shipped unit has already been billed.' });
+      return ok(res, {
+        invoice: null,
+        message: 'Nothing new to invoice — every shipped unit has already been billed.',
+      });
     }
 
     const config = await loadConfig();
@@ -145,13 +186,20 @@ invoicesRouter.post(
     const invoice = await Invoice.create({
       number: `INV-${await nextSeq('invoice', 2000)}`,
       type: InvoiceType.ONE_TIME,
-      customerId: order.customerId, customerName: order.customerName,
-      orderId: order._id, orderNumber: order.number,
-      currency: order.currency, status: InvoiceStatus.ISSUED,
+      customerId: order.customerId,
+      customerName: order.customerName,
+      orderId: order._id,
+      orderNumber: order.number,
+      currency: order.currency,
+      status: InvoiceStatus.ISSUED,
       lines: billable,
-      subtotal, taxTotal, total: subtotal + taxTotal,
-      amountPaid: 0, amountDue: subtotal + taxTotal,
-      issueDate: now, dueDate: addDays(now, dueDays),
+      subtotal,
+      taxTotal,
+      total: subtotal + taxTotal,
+      amountPaid: 0,
+      amountDue: subtotal + taxTotal,
+      issueDate: now,
+      dueDate: addDays(now, dueDays),
       payments: [],
     });
 
@@ -172,7 +220,15 @@ invoicesRouter.post(
       reason: `Invoice raised for the shipped quantity of ${order.number}`,
     });
 
-    return ok(res, { invoice: toDto(invoice), message: `${invoice.number} raised for ${billable.length} line(s).` }, undefined, 201);
+    return ok(
+      res,
+      {
+        invoice: toDto(invoice),
+        message: `${invoice.number} raised for ${billable.length} line(s).`,
+      },
+      undefined,
+      201,
+    );
   }),
 );
 
@@ -190,27 +246,40 @@ invoicesRouter.post(
   validate(paymentSchema),
   asyncHandler(async (req, res) => {
     const invoice: any = await Invoice.findOne({
-      $or: [{ number: req.params.id }, ...(req.params.id.match(/^[0-9a-f]{24}$/i) ? [{ _id: req.params.id }] : [])],
+      $or: [
+        { number: req.params.id },
+        ...(req.params.id.match(/^[0-9a-f]{24}$/i) ? [{ _id: req.params.id }] : []),
+      ],
     });
     if (!invoice) throw notFound(`No invoice ${req.params.id}`);
-    if (invoice.status === InvoiceStatus.VOID) throw invalidState('This invoice is void and cannot take a payment.');
+    if (invoice.status === InvoiceStatus.VOID)
+      throw invalidState('This invoice is void and cannot take a payment.');
 
     const body = req.body as RecordPaymentRequest;
     if (body.amount > invoice.amountDue) {
-      throw badRequest(`Payment of ${body.amount} exceeds the outstanding balance of ${invoice.amountDue}.`);
+      throw badRequest(
+        `Payment of ${body.amount} exceeds the outstanding balance of ${invoice.amountDue}.`,
+      );
     }
 
     invoice.payments.push({
-      amount: body.amount, method: body.method, reference: body.reference,
+      amount: body.amount,
+      method: body.method,
+      reference: body.reference,
       receivedAt: body.receivedAt ? new Date(body.receivedAt) : new Date(),
-      recordedById: req.user!.id, recordedByName: req.user!.name,
+      recordedById: req.user!.id,
+      recordedByName: req.user!.name,
     });
     invoice.amountPaid += body.amount;
     invoice.amountDue = invoice.total - invoice.amountPaid;
     invoice.status = invoice.amountDue <= 0 ? InvoiceStatus.PAID : InvoiceStatus.PARTIALLY_PAID;
     await invoice.save();
 
-    if (invoice.type === InvoiceType.ONE_TIME && invoice.status === InvoiceStatus.PAID && invoice.orderId) {
+    if (
+      invoice.type === InvoiceType.ONE_TIME &&
+      invoice.status === InvoiceStatus.PAID &&
+      invoice.orderId
+    ) {
       await Order.updateOne(
         { _id: invoice.orderId, status: { $ne: OrderStatus.PAID } },
         { $set: { status: OrderStatus.PAID } },

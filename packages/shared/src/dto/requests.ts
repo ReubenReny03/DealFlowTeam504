@@ -34,6 +34,7 @@ import type {
   Id,
   InvoiceDto,
   NegotiationEventDto,
+  NotificationDto,
   OrderDto,
   PriceListDto,
   PriceListEntryDto,
@@ -288,6 +289,35 @@ export interface ApprovalListDto {
   items: ApprovalDto[];
 }
 
+/**
+ * `POST /quotations/:id/portal-link` — reissue a customer magic link.
+ * Revokes every live token for the quotation and mints a fresh one. The
+ * expiry-message flow (USER_FLOWS §E11) tells the customer to ask for this.
+ */
+export interface ReissuePortalLinkRequest {
+  reason?: string;
+}
+
+export interface ReissuePortalLinkResponse {
+  token: string;
+  /** Relative path the rep can copy to the customer, e.g. `/portal/q/Q-1042?token=…`. */
+  url: string;
+  expiresAt: IsoDate;
+  /** How many previously-live links this reissue revoked. */
+  revokedCount: number;
+}
+
+/* ------------------------------------------------------------------ notifications */
+
+export interface NotificationListDto {
+  items: NotificationDto[];
+  unreadCount: number;
+}
+
+export interface MarkAllReadResponse {
+  updated: number;
+}
+
 /* ------------------------------------------------------------------ portal & negotiation */
 
 export interface PortalResolveResponse {
@@ -470,6 +500,10 @@ export interface ReportingDashboardDto {
   quotesCreated: number;
   avgApprovalTimeMs: number;
   avgApprovalTimeLabel: string;
+  /** The SLA target the average is judged against (hours). */
+  avgApprovalSlaHours: number;
+  /** True when there is real data and the average is at or under the SLA target. */
+  avgApprovalWithinSla: boolean;
   topUpsellProduct: { productId: Id; name: string; timesAdded: number } | null;
   totalQuotedValue: Money;
   totalConfirmedValue: Money;
@@ -504,6 +538,7 @@ export type {
   FulfillmentDto,
   InvoiceDto,
   NegotiationEventDto,
+  NotificationDto,
   OrderDto,
   PriceListDto,
   ProductDto,

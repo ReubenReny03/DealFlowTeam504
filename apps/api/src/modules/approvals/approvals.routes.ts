@@ -20,7 +20,7 @@ import { requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { forbidden, invalidState, notFound } from '../../utils/apiError.js';
-import { ok } from '../../utils/respond.js';
+import { ok, paginate } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
 import { mountModuleHealth } from '../module.health.js';
@@ -31,10 +31,16 @@ const APPROVER_VIEW: Role[] = [Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE, Rol
 const DECISION_ROLES: Role[] = [Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE];
 
 mountModuleHealth(approvalsRouter, {
-  module: 'approvals', owner: 'C', screens: [5, 6],
+  module: 'approvals',
+  owner: 'C',
+  screens: [5, 6],
   implemented: [
-    'GET /', 'GET /:id', 'GET /:id/trail',
-    'POST /:id/approve', 'POST /:id/return', 'POST /:id/reject',
+    'GET /',
+    'GET /:id',
+    'GET /:id/trail',
+    'POST /:id/approve',
+    'POST /:id/return',
+    'POST /:id/reject',
   ],
   todo: [],
 });
@@ -43,6 +49,8 @@ approvalsRouter.get(
   '/',
   requireAuth(APPROVER_VIEW),
   asyncHandler(async (req, res) => {
+    const page = Math.max(1, Number(req.query.page ?? 1));
+    const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize ?? 50)));
     const filter: Record<string, unknown> = {};
     if (req.query.status) filter.status = req.query.status;
     if (req.query.pendingOnly === 'true') filter.status = ApprovalStatus.PENDING;
@@ -52,8 +60,13 @@ approvalsRouter.get(
       filter.currentStage = req.user!.role;
     }
 
-    const [items, pending, returned, approved, rejected] = await Promise.all([
-      Approval.find(filter).sort({ submittedAt: -1 }).limit(100).lean(),
+    const [items, total, pending, returned, approved, rejected] = await Promise.all([
+      Approval.find(filter)
+        .sort({ submittedAt: -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean(),
+      Approval.countDocuments(filter),
       Approval.countDocuments({ status: ApprovalStatus.PENDING }),
       Approval.countDocuments({ status: ApprovalStatus.RETURNED }),
       Approval.countDocuments({ status: ApprovalStatus.APPROVED }),
@@ -64,7 +77,7 @@ approvalsRouter.get(
       counts: { pending, returned, approved, rejected },
       items: toDtoList(items),
     };
-    ok(res, payload);
+    ok(res, payload, paginate([], page, pageSize, total));
   }),
 );
 
@@ -110,7 +123,9 @@ async function resolveAssignee(role: Role): Promise<string | undefined> {
 /** Only the role holding the active step may decide it — an Admin may act on any step. */
 function assertActiveStepRole(approval: any, actorRole: Role): any {
   if (approval.status !== ApprovalStatus.PENDING || approval.currentStepIndex < 0) {
-    throw invalidState(`This approval is ${approval.status}, not PENDING. There is nothing left to decide.`);
+    throw invalidState(
+      `This approval is ${approval.status}, not PENDING. There is nothing left to decide.`,
+    );
   }
   const step = approval.steps[approval.currentStepIndex];
   if (!step || step.status !== ApprovalStepStatus.ACTIVE) {
@@ -159,7 +174,14 @@ approvalsRouter.post(
       approval.decidedAt = now;
       approval.cycleTimeMs = now.getTime() - new Date(approval.submittedAt).getTime();
     }
-    approval.trail.push({ actorId: actor.id, actorName: actor.name, role: actor.role, action: ApprovalAction.APPROVED, reason, at: now });
+    approval.trail.push({
+      actorId: actor.id,
+      actorName: actor.name,
+      role: actor.role,
+      action: ApprovalAction.APPROVED,
+      reason,
+      at: now,
+    });
     await approval.save();
 
     if (fullyApproved) {
@@ -208,7 +230,14 @@ approvalsRouter.post(
     approval.assignedToName = undefined;
     approval.decidedAt = now;
     approval.cycleTimeMs = now.getTime() - new Date(approval.submittedAt).getTime();
-    approval.trail.push({ actorId: actor.id, actorName: actor.name, role: actor.role, action: ApprovalAction.RETURNED, reason, at: now });
+    approval.trail.push({
+      actorId: actor.id,
+      actorName: actor.name,
+      role: actor.role,
+      action: ApprovalAction.RETURNED,
+      reason,
+      at: now,
+    });
     await approval.save();
 
     await Quotation.updateOne(
@@ -257,7 +286,14 @@ approvalsRouter.post(
     approval.assignedToName = undefined;
     approval.decidedAt = now;
     approval.cycleTimeMs = now.getTime() - new Date(approval.submittedAt).getTime();
-    approval.trail.push({ actorId: actor.id, actorName: actor.name, role: actor.role, action: ApprovalAction.REJECTED, reason, at: now });
+    approval.trail.push({
+      actorId: actor.id,
+      actorName: actor.name,
+      role: actor.role,
+      action: ApprovalAction.REJECTED,
+      reason,
+      at: now,
+    });
     await approval.save();
 
     await Quotation.updateOne(

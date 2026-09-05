@@ -13,11 +13,11 @@ npm run dev
 
 **Set up three browser windows before you go on:**
 
-| Window | Signed in as | Sitting on |
-|---|---|---|
-| 1 | J. Rao (`rep@dealflow360.test`) | `/app/quotations` |
-| 2 | M. Shah (`manager@dealflow360.test`) | `/app/approvals` |
-| 3 | signed out | Priya's portal URL, from the reset output |
+| Window | Signed in as                         | Sitting on                                |
+| ------ | ------------------------------------ | ----------------------------------------- |
+| 1      | J. Rao (`rep@dealflow360.test`)      | `/app/quotations`                         |
+| 2      | M. Shah (`manager@dealflow360.test`) | `/app/approvals`                          |
+| 3      | signed out                           | Priya's portal URL, from the reset output |
 
 Keep a fourth terminal with `npm run demo:reset` ready. If anything goes sideways
 you are seconds from a clean state.
@@ -29,16 +29,16 @@ panel. Never type a password in front of judges.
 
 ## The eight judging moments
 
-| # | Moment | Where | Why it wins |
-|---|---|---|---|
-| 1 | The blended risk score is **explained on screen** | screen 6 | it is not a black box |
-| 2 | The **re-approval loop**, live | portal → screen 5 | the most impressive twenty seconds |
-| 3 | The split shows its **rationale**, and override works | screen 8 | the logic is provably real |
-| 4 | One order → **two billing artefacts** | screens 10, 13 | hybrid billing is genuinely hybrid |
-| 5 | The portal is **provably restricted** | R. Das → 403 | five seconds, very high value |
-| 6 | The **audit trail** with user, time and reason | screen 6 | governance, not just workflow |
-| 7 | Change a ceiling, **behaviour changes live** | screen 18 | proves nothing is hardcoded |
-| 8 | Everything is **seeded, fast, never blank** | all | it feels finished |
+| #   | Moment                                                | Where             | Why it wins                        |
+| --- | ----------------------------------------------------- | ----------------- | ---------------------------------- |
+| 1   | The blended risk score is **explained on screen**     | screen 6          | it is not a black box              |
+| 2   | The **re-approval loop**, live                        | portal → screen 5 | the most impressive twenty seconds |
+| 3   | The split shows its **rationale**, and override works | screen 8          | the logic is provably real         |
+| 4   | One order → **two billing artefacts**                 | screens 10, 13    | hybrid billing is genuinely hybrid |
+| 5   | The portal is **provably restricted**                 | R. Das → 403      | five seconds, very high value      |
+| 6   | The **audit trail** with user, time and reason        | screen 6          | governance, not just workflow      |
+| 7   | Change a ceiling, **behaviour changes live**          | screen 18         | proves nothing is hardcoded        |
+| 8   | Everything is **seeded, fast, never blank**           | all               | it feels finished                  |
 
 ---
 
@@ -54,7 +54,7 @@ panel. Never type a password in front of judges.
 
 ---
 
-### 0:20 – 1:00 · The rep builds a quote *(window 1, J. Rao)*
+### 0:20 – 1:00 · The rep builds a quote _(window 1, J. Rao)_
 
 **Do:** open Q-1042 for Acme Corp. Point at the upsell panel. Click **Add to
 Quote** on Care Plan 2yr.
@@ -67,15 +67,15 @@ Quote** on Care Plan 2yr.
 
 **Do:** click into the Onsite Setup Service discount field, type `18`, tab out.
 
-> "Now the discount. Acme is a Gold customer, allowed 15%. But this is a *service*
+> "Now the discount. Acme is a Gold customer, allowed 15%. But this is a _service_
 > line, and services are capped at 10% because the margins are thin.
 >
 > **[tab]** — the moment I leave the field: **OVER, plus 8 points**. And the risk
 > card underneath already says HIGH, 33, and tells me it's going to route to a
 > Sales Manager and then Finance. Before I've submitted anything."
 
-**Fallback:** *"The margin figure is live here — you'll see it move again when we
-re-price in a moment."* Then carry on to submit.
+**Fallback:** _"The margin figure is live here — you'll see it move again when we
+re-price in a moment."_ Then carry on to submit.
 
 ---
 
@@ -87,11 +87,11 @@ re-price in a moment."* Then carry on to submit.
 > scored the quote, decided it needed two people, and intercepted it."
 
 **Fallback:** switch to M. Shah's window — Q-1042 is already seeded in the queue.
-*"Here it is, already waiting for the manager."*
+_"Here it is, already waiting for the manager."_
 
 ---
 
-### 1:20 – 2:10 · Why it was flagged *(window 2, M. Shah)* · **MOMENT 1, 6**
+### 1:20 – 2:10 · Why it was flagged _(window 2, M. Shah)_ · **MOMENT 1, 6**
 
 **Do:** open Approvals, click Q-1042.
 
@@ -100,7 +100,7 @@ re-price in a moment."* Then carry on to submit.
 >
 > **[open]** — and this is the part that matters. It doesn't just say HIGH."
 
-**Do:** point at the *Why This Quote Was Flagged* table, line by line.
+**Do:** point at the _Why This Quote Was Flagged_ table, line by line.
 
 > "The laptop: 12% given, 15% allowed — fine. The setup service: 18% given, 10%
 > allowed — **eight points over**. And the weight column shows how much of the
@@ -128,7 +128,7 @@ re-price in a moment."* Then carry on to submit.
 
 ---
 
-### 2:35 – 3:20 · The portal *(window 3, Priya)* · **MOMENT 5**
+### 2:35 – 3:20 · The portal _(window 3, Priya)_ · **MOMENT 5**
 
 **Do:** switch to window 3.
 
@@ -136,7 +136,7 @@ re-price in a moment."* Then carry on to submit.
 > items. And notice what she **cannot** see: no margin, no cost, no risk score,
 > no idea who approved it."
 
-**Do:** *(optional, five seconds — sign in as R. Das and open the same URL)*
+**Do:** _(optional, five seconds — sign in as R. Das and open the same URL)_
 
 > "And it's genuinely restricted. Here's a customer from a different company
 > opening the same link — **403.** Not a hidden button. A different credential
@@ -147,9 +147,9 @@ discount, click **Submit Request**.
 
 > "She wants a better warranty discount. She proposes it right here — no email."
 
-**Fallback:** if the counter endpoint is not wired, say: *"When she submits, the
+**Fallback:** if the counter endpoint is not wired, say: _"When she submits, the
 system re-scores the new terms against the same engine and, if they breach,
-sends it straight back for approval."* Then show the seeded re-approval state.
+sends it straight back for approval."_ Then show the seeded re-approval state.
 
 ---
 
@@ -164,7 +164,7 @@ sends it straight back for approval."* Then show the seeded re-approval state.
 > **put the quote back in the approval chain by itself.** The audit reason says
 > exactly that: re-entered from negotiation."
 
-*(Pause here. This is the moment. Let it land.)*
+_(Pause here. This is the moment. Let it land.)_
 
 ---
 
@@ -178,7 +178,7 @@ Fulfillment.
 >
 > But here's the part I care about — **it tells you why.**"
 
-**Do:** point at the *Why this split* panel.
+**Do:** point at the _Why this split_ panel.
 
 > "No single warehouse could cover it. Warehouses ranked by coverage, then by
 > shipping cost weight. Main first. And if operations disagrees, **Manual
@@ -192,7 +192,7 @@ Fulfillment.
 > Neither list ever contains the other."
 
 **Fallback:** the seeded ORD-1041 and ORD-1032 already show a split, a backorder
-and both invoice types. *"Here's one from earlier today."*
+and both invoice types. _"Here's one from earlier today."_
 
 ---
 
@@ -221,7 +221,7 @@ and Services to 20, type a reason, **Save configuration**.
 > Nothing about that risk engine is hardcoded. It reads this screen."
 
 **Fallback:** if the impact panel is empty, open Q-1042 — the score has changed.
-*"Same quote, different number, because the rules changed."*
+_"Same quote, different number, because the rules changed."_
 
 ---
 
@@ -240,7 +240,7 @@ and Services to 20, type a reason, **Save configuration**.
 
 ## What we'd build next
 
-*(Have this ready — it is worth thirty seconds if you are asked.)*
+_(Have this ready — it is worth thirty seconds if you are asked.)_
 
 - Real-time portal ↔ rep sync over websockets — a refresh proves the loop today
 - Email delivery of quotation links
@@ -253,11 +253,30 @@ Full list with reasoning: `FEATURE_PRIORITY.md` P3.
 
 ---
 
+## Phase E surfaces — optional 20-second detours
+
+Built in the integration/hardening pass (`PHASE_E.md`). None are on the critical
+path; drop them in only if you have slack.
+
+- **Notification bell** (internal header): after the "nudge" beat in the Deal
+  Health close, click the 🔔 — the nudge/escalation is sitting there, deep-links
+  to the deal, "Mark all read" clears the badge.
+- **Reissue customer link**: on the approval-detail page for an approved quote,
+  "Reissue customer link" → a fresh magic link, old links revoked. This is the
+  other end of the portal's "ask your account manager for a new one" message.
+- **SLA highlight**: on Reporting, the "Avg Approval Time" tile is green within
+  the 24h target, rose over it; the approval queue flags any pending item past it.
+- **Stale-version dialog**: edit Q-1042 in two tabs, save both — the second gets
+  a "this quotation changed while you were editing it" dialog with a Reload
+  button, not a lost write.
+
+---
+
 ## If something breaks on stage
 
 1. **Do not debug in front of judges.** Move to the next beat and come back.
 2. Every beat has a seeded fallback — the state you need already exists in the
-   database, so you can *show* it rather than *create* it.
+   database, so you can _show_ it rather than _create_ it.
 3. If the app is genuinely wedged: `npm run demo:reset` in the spare terminal,
    and keep talking about the rule while it rebuilds.
 4. If the API is down, the quotation builder still computes totals, margin and

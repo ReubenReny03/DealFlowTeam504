@@ -8,14 +8,17 @@ human-readable summary of both, kept current as work lands.
 new gap is found.** Move the row, don't just annotate it — a checklist that
 still shows something as pending after it shipped is worse than no checklist.
 
-**Last updated:** 2026-09-05, after Agent C and Agent D's write sides were completed in full (A and B were already done).
+**Last updated:** 2026-09-05, after **Phase E (Integration & Hardening)** — the
+Agent E role plus every remaining P2 polish item. See `PHASE_E.md`.
 
 **Build health at last update:**
 
 ```
-npm run verify   → green (build + typecheck + lint, 0 warnings + 99 unit tests
-                   + reset, 13/13 assertions + smoke, 13/13 steps)
-npm run smoke    → 13 passing · 0 failing · 0 pending
+npm run verify              → green (build + typecheck ×3 + lint, 0 warnings
+                               + 99 unit tests + reset, 16/16 assertions
+                               + smoke, 16/16 steps)
+npm run smoke               → 16 passing · 0 failing · 0 pending
+npm run build -w @dealflow/web → green (Angular template compile)
 ```
 
 ---
@@ -136,17 +139,17 @@ A follow-up sweep found a few things beyond C and D's own scope that were still 
 - [x] #28 Reporting KPIs, all 4 filters (D)
 - [x] #30 Nudge/escalate actions (D)
 - [x] #31 Delivery slippage — detection, display and the underlying alert action wiring are done (D); no dedicated "slippage" action beyond nudge/escalate was specified
-- [ ] #29 Empty/loading/error states — done for A & B's screens; **not separately re-audited on C/D's screens in this pass** (their read-side scaffolding already handled loading/error/empty per the Phase-3 baseline)
+- [x] #29 Empty/loading/error states — re-audited on every C/D screen in Phase E. Pattern was already consistent on the list/detail screens; added a missing error branch to `portal-messages` and `portal-profile`.
 
 ## P2 polish
 
 - [x] #32 Variants editor + multi-currency price lists (A)
-- [x] #33 CSV/PDF export (D) — reporting export.csv/export.pdf and the invoice summary CSV; XLS is served as CSV (opens natively in every spreadsheet app, no binary XLS writer needed)
-- [x] #34 Pagination/search — done for quotations; not verified on approvals/subscriptions/invoices lists
-- [ ] #35 Notification centre UI (C) — `PATCH /:id/read` exists; no dedicated notification-centre screen was built
-- [ ] #36 Magic-link reissue flow (expiry message exists; reissue doesn't) (C)
-- [ ] #37 Avg-approval-time SLA highlighting (D)
-- [ ] #38 Merge-prompt UX on stale version (current bar — a clear toast — is met; the fancier merge UI is not built)
+- [x] #33 CSV/PDF export (D) — reporting export.csv/export.pdf/export.xlsx and the invoice summary CSV
+- [x] #34 Pagination — quotations already had it; Phase E added `page`/`pageSize` + `meta.total` to the approvals, subscriptions and invoices list endpoints and a shared `<df-paginator>` on those three screens
+- [x] #35 Notification centre UI (E) — user-scoped `GET /notifications` with `unreadCount`, new `POST /notifications/read-all`, and a `NotificationBellComponent` in the internal shell header
+- [x] #36 Magic-link reissue (E) — `POST /quotations/:id/portal-link` revokes every live token and mints a fresh 14-day link; "Reissue customer link" button on approval-detail and quotation-detail
+- [x] #37 Avg-approval-time SLA highlighting (E) — `APPROVAL_SLA_HOURS` constant; reporting returns `avgApprovalWithinSla`; the KPI tile colours green/rose and the approval queue shows an "⚠ over SLA" chip
+- [x] #38 Merge-prompt UX on stale version (E) — the interceptor stops toasting `409 STALE_VERSION`; screen 4 shows a proper "reload the latest version" dialog with the local edits kept visible behind it
 
 ## P3 — explicitly out of scope, nothing to do
 
@@ -156,32 +159,43 @@ deferred per `DECISIONS.md`.
 
 ## Cross-module contract tests (`AGENT_E_INTEGRATION.md`)
 
-| #   | Test                                                                                     | Status                                              |
-| --- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| 1   | Admin raises Gold + Services to 20% ⇒ Q-1042 auto-approves                               | ✅ smoke 12                                          |
-| 2   | Laptop 12% / Setup 18% ⇒ 33, HIGH, chain, explanation table                              | ✅ smoke 2 + reset 3                                 |
-| 3   | Return ⇒ edit ⇒ resubmit ⇒ 3 audit entries in order                                      | ✅ reset 4 (seeded) + live approve/return/reject path |
-| 4   | Portal scoped to Priya only; R. Das / internal JWT / expired token all correctly refused | ✅ smoke 7                                           |
-| 5   | Counter beyond threshold ⇒ automatic re-approval                                         | ✅ smoke 8                                           |
-| 6   | Confirm ⇒ split across Main 18 + East 6, reserved, rationale                             | ✅ smoke 5 (plan) + live confirm → order → split path |
-| 7   | Restock ⇒ consolidation prompt                                                           | ✅ `POST /stock/adjust` flips `CONSOLIDATION_AVAILABLE`; verified by code path, not a dedicated smoke step |
-| 8   | Hybrid order ⇒ one-time invoice + recurring schedule, no shared line                     | ✅ smoke 6 + reset 6                                 |
-| 9   | Payment ⇒ invoice PAID, stepper advances, KPIs update                                    | ✅ smoke 9                                           |
-| 10  | Idle deal ⇒ Stalled Deals; nudge writes an activity                                      | ✅ reset 7 (detection) + live `/nudge` action        |
-| 11  | All seven credentials authenticate and land correctly                                    | ✅ smoke 0 + reset 2                                 |
+| #   | Test                                                                                     | Status                                                                                                                                                |
+| --- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Admin raises Gold + Services to 20% ⇒ Q-1042 auto-approves                               | ✅ smoke 12                                                                                                                                           |
+| 2   | Laptop 12% / Setup 18% ⇒ 33, HIGH, chain, explanation table                              | ✅ smoke 2 + reset 3                                                                                                                                  |
+| 3   | Return ⇒ edit ⇒ resubmit ⇒ 3 audit entries in order                                      | ✅ reset 4 (seeded) + live approve/return/reject path                                                                                                 |
+| 4   | Portal scoped to Priya only; R. Das / internal JWT / expired token all correctly refused | ✅ smoke 7                                                                                                                                            |
+| 5   | Counter beyond threshold ⇒ automatic re-approval                                         | ✅ smoke 8                                                                                                                                            |
+| 6   | Confirm ⇒ split across Main 18 + East 6, reserved, rationale                             | ✅ smoke 5 (plan) + live confirm → order → split path                                                                                                 |
+| 7   | Restock ⇒ consolidation prompt                                                           | ✅ **smoke 13** — restock East Depot ⇒ `POST /stock/adjust` flips the order to consolidation-available, `GET /fulfillment/:id/consolidation` confirms |
+| 8   | Hybrid order ⇒ one-time invoice + recurring schedule, no shared line                     | ✅ smoke 6 + reset 6                                                                                                                                  |
+| 9   | Payment ⇒ invoice PAID, stepper advances, KPIs update                                    | ✅ smoke 9                                                                                                                                            |
+| 10  | Idle deal ⇒ Stalled Deals; nudge writes an activity                                      | ✅ reset 7 (detection) + smoke 14 (escalate → notification) + live `/nudge`                                                                           |
+| 11  | All seven credentials authenticate and land correctly                                    | ✅ smoke 0 + reset 2                                                                                                                                  |
+
+Plus Phase E additions: **smoke 15** (magic-link reissue revokes the old link),
+**reset 14** (reservations back allocations), **reset 15** (no double-billing),
+**reset 16** (one alert per rule per deal).
 
 ---
 
+## Agent E — Integration & Hardening — ✅ complete
+
+See `PHASE_E.md`. Closed every open P2 item (#29, #34, #35, #36, #37, #38),
+automated the manual cross-module sweeps (smoke 13–15, reset 14–16), and worked
+the three `AGENT_E_INTEGRATION.md` checkpoints. Three additive contract changes
+(`CONTRACT_CHANGELOG.md` #5–#7). No P0/P1 regression — the write sides of A/B/C/D
+are untouched.
+
 ## Build health
 
-- [x] `npm run verify` green: build + typecheck + lint (0 warnings) + 99 unit tests + reset (13/13) + smoke (13/13)
-- [x] Smoke: **13 passing, 0 failing, 0 pending**
-- [x] Cross-module contract tests #1–#11 all green (see above)
-- [ ] Full demo script rehearsal (`DEMO_SCRIPT.md`) — the underlying endpoints are live; an actual click-through rehearsal against the running app has not been performed in this pass (verification here was `npm run verify` plus a manual code review, not a live browser walkthrough)
+- [x] `npm run verify` green: build + typecheck ×3 + lint (0 warnings) + 99 unit tests + reset (16/16) + smoke (16/16)
+- [x] `npm run build -w @dealflow/web` green — Angular template compile
+- [x] Smoke: **16 passing, 0 failing, 0 pending**
+- [x] Cross-module contract tests #1–#11 all green — 7 as smoke steps, 4 already automated
+- [ ] Full demo script rehearsal (`DEMO_SCRIPT.md`) — every endpoint and screen is live and exercised by `npm run verify`; an actual timed click-through against the running app and the eight screenshot fallbacks are a person-with-the-app task, not done here
 
-**Bottom line:** A, B, C and D are all functionally complete on the write
-side. Every P0 endpoint from all four agent briefs exists and is exercised by
-`npm run verify`'s reset assertions and smoke suite. Remaining gaps are P2
-polish (CSV/PDF export, a notification-centre screen, magic-link reissue, SLA
-highlighting, the fancier stale-version merge UI) and a live demo rehearsal —
-nothing in the P0/P1 critical path.
+**Bottom line:** A, B, C, D and the Agent E hardening pass are all complete.
+Every P0/P1/P2 row on this board is done or a documented deliberate non-goal
+(sockets, email delivery, field-level merge UI). The only outstanding item is a
+human demo rehearsal — nothing in code.

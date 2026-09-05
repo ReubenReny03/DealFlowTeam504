@@ -17,19 +17,16 @@ import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
-import {
-  ApprovalStatus,
-  InvoiceStatus,
-  RiskLevel,
-  Role,
-} from '@dealflow/shared';
+import { ApprovalStatus, InvoiceStatus, RiskLevel, Role } from '@dealflow/shared';
 import { env, isLocalMongoUri } from '../apps/api/src/config/env.js';
 import { connectMongo, disconnectMongo } from '../apps/api/src/db/connection.js';
 import {
   Approval,
   AuditLog,
   DealAlert,
+  Fulfillment,
   Invoice,
+  Order,
   PortalToken,
   Quotation,
   Stock,
@@ -67,7 +64,9 @@ function expect(condition: unknown, message: string): void {
 
 function eq(actual: unknown, expected: unknown, label: string): void {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    throw new Error(`${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+    throw new Error(
+      `${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+    );
   }
 }
 
@@ -75,7 +74,9 @@ const ASSERTIONS: Assertion[] = [
   {
     name: 'exactly 7 demo users exist',
     run: async () => {
-      const count = await User.countDocuments({ email: { $in: DEMO_ACCOUNTS.map((a) => a.email) } });
+      const count = await User.countDocuments({
+        email: { $in: DEMO_ACCOUNTS.map((a) => a.email) },
+      });
       eq(count, 7, 'demo user count');
     },
   },
@@ -125,8 +126,14 @@ const ASSERTIONS: Assertion[] = [
   {
     name: 'Laptop Pro 14 availability: Main 18, East Depot 6',
     run: async () => {
-      const main: any = await Stock.findOne({ warehouseId: IDS.warehouses.main, productId: IDS.products.laptop }).lean();
-      const east: any = await Stock.findOne({ warehouseId: IDS.warehouses.east, productId: IDS.products.laptop }).lean();
+      const main: any = await Stock.findOne({
+        warehouseId: IDS.warehouses.main,
+        productId: IDS.products.laptop,
+      }).lean();
+      const east: any = await Stock.findOne({
+        warehouseId: IDS.warehouses.east,
+        productId: IDS.products.laptop,
+      }).lean();
       eq(main?.available, 18, 'Main Warehouse laptop availability');
       eq(east?.available, 6, 'East Depot laptop availability');
       eq(main.inStock - main.reserved, main.available, 'Main stock invariant');
@@ -145,7 +152,11 @@ const ASSERTIONS: Assertion[] = [
       eq(recurring.status, InvoiceStatus.PAID, 'INV-1043 status');
       eq(recurring.type, 'RECURRING', 'INV-1043 type');
       // One order, two billing artefacts, and they never share a line.
-      eq(oneTime.orderId?.toString(), recurring.orderId?.toString(), 'both invoices belong to ORD-1041');
+      eq(
+        oneTime.orderId?.toString(),
+        recurring.orderId?.toString(),
+        'both invoices belong to ORD-1041',
+      );
       const recurringProductIds = recurring.lines.map((l: any) => String(l.productId));
       const oneTimeProductIds = oneTime.lines.map((l: any) => String(l.productId));
       expect(
@@ -163,7 +174,10 @@ const ASSERTIONS: Assertion[] = [
       const anomaly = await DealAlert.countDocuments({ type: 'DISCOUNT_ANOMALY' });
       expect(stalled >= 1, `expected at least one stalled deal, found ${stalled}`);
       expect(anomaly >= 1, `expected at least one discount anomaly, found ${anomaly}`);
-      const q1030 = await DealAlert.findOne({ quotationNumber: 'Q-1030', type: 'STALLED_DEAL' }).lean();
+      const q1030 = await DealAlert.findOne({
+        quotationNumber: 'Q-1030',
+        type: 'STALLED_DEAL',
+      }).lean();
       expect(q1030, 'Q-1030 should be flagged as a stalled deal');
       eq((q1030 as any).issue, 'idle 9 days', 'Q-1030 stalled issue text');
     },
@@ -211,7 +225,10 @@ const ASSERTIONS: Assertion[] = [
       }
       const quotationIds = new Set(quotations.map((q: any) => String(q._id)));
       for (const a of approvals as any[]) {
-        expect(quotationIds.has(String(a.quotationId)), `approval for ${a.quotationNumber} points at a missing quotation`);
+        expect(
+          quotationIds.has(String(a.quotationId)),
+          `approval for ${a.quotationNumber} points at a missing quotation`,
+        );
       }
       expect(invoices.length > 0 && stock.length > 0, 'invoices and stock must not be empty');
     },
@@ -232,10 +249,16 @@ const ASSERTIONS: Assertion[] = [
       const quotes: any[] = await Quotation.find().select('number totals lines').limit(50).lean();
       for (const q of quotes) {
         for (const key of ['subtotal', 'discountTotal', 'netTotal', 'taxTotal', 'grandTotal']) {
-          expect(Number.isInteger(q.totals[key]), `${q.number}.totals.${key} is not an integer (${q.totals[key]})`);
+          expect(
+            Number.isInteger(q.totals[key]),
+            `${q.number}.totals.${key} is not an integer (${q.totals[key]})`,
+          );
         }
         for (const l of q.lines) {
-          expect(Number.isInteger(l.lineTotal), `${q.number} line ${l.lineId} lineTotal is not an integer`);
+          expect(
+            Number.isInteger(l.lineTotal),
+            `${q.number} line ${l.lineId} lineTotal is not an integer`,
+          );
         }
       }
     },
@@ -248,6 +271,61 @@ const ASSERTIONS: Assertion[] = [
         const sum = inv.lines.reduce((a: number, l: any) => a + l.total, 0);
         eq(sum, inv.total, `${inv.number} total`);
         eq(inv.amountDue, inv.total - inv.amountPaid, `${inv.number} amountDue`);
+      }
+    },
+  },
+  {
+    name: 'every committed fulfillment allocation is backed by a real stock reservation',
+    run: async () => {
+      const live: any[] = await Fulfillment.find({
+        reserved: true,
+        status: { $nin: ['SHIPPED', 'CANCELLED'] },
+      }).lean();
+      const rows: any[] = await Stock.find().lean();
+      const reservedBy = new Map(rows.map((r) => [`${r.warehouseId}:${r.productId}`, r.reserved]));
+      for (const f of live) {
+        for (const alloc of f.allocations ?? []) {
+          for (const line of alloc.lines ?? []) {
+            const key = `${alloc.warehouseId}:${line.productId}`;
+            const reserved = reservedBy.get(key) ?? 0;
+            expect(
+              reserved >= line.qty,
+              `${f.orderNumber}: ${alloc.warehouseName} holds ${line.qty} of ${line.productName} allocated but only ${reserved} reserved in stock`,
+            );
+          }
+        }
+      }
+    },
+  },
+  {
+    name: 'no order line is invoiced beyond what has shipped (no double-billing)',
+    run: async () => {
+      const orders: any[] = await Order.find().lean();
+      for (const order of orders) {
+        for (const line of order.lines ?? []) {
+          if (line.isSubscription) continue; // recurring lines bill on schedule, not on shipment
+          expect(
+            (line.qtyInvoiced ?? 0) <= (line.qtyShipped ?? 0),
+            `${order.number} line ${line.lineId}: invoiced ${line.qtyInvoiced} > shipped ${line.qtyShipped}`,
+          );
+        }
+      }
+    },
+  },
+  {
+    name: 'at most one deal alert per (quotation, type) — the unique index holds',
+    run: async () => {
+      const alerts: any[] = await DealAlert.find()
+        .select('quotationId type quotationNumber')
+        .lean();
+      const seen = new Set<string>();
+      for (const a of alerts) {
+        const key = `${a.quotationId}:${a.type}`;
+        expect(
+          !seen.has(key),
+          `duplicate ${a.type} alert for ${a.quotationNumber ?? a.quotationId}`,
+        );
+        seen.add(key);
       }
     },
   },
@@ -265,7 +343,9 @@ async function runAssertions(): Promise<boolean> {
     }
   }
   if (failures > 0) {
-    log.banner(`RESET VERIFICATION FAILED — ${failures} of ${ASSERTIONS.length} assertions did not pass`);
+    log.banner(
+      `RESET VERIFICATION FAILED — ${failures} of ${ASSERTIONS.length} assertions did not pass`,
+    );
     return false;
   }
   log.ok(`all ${ASSERTIONS.length} assertions passed`);
@@ -311,7 +391,9 @@ async function main(): Promise<void> {
   log.info(`configured URI: ${env.mongoUri.replace(/\/\/[^@]*@/, '//***@')}`);
   if (!OPTS.checkOnly && !isLocalMongoUri(env.mongoUri) && !OPTS.force) {
     log.error('Refusing to wipe a database whose URI does not look local/dev.');
-    log.error('Pass --force if you are certain. Guard rail: apps/api/src/config/env.ts:isLocalMongoUri');
+    log.error(
+      'Pass --force if you are certain. Guard rail: apps/api/src/config/env.ts:isLocalMongoUri',
+    );
     process.exit(2);
   }
   log.ok(OPTS.checkOnly ? 'read-only run, no wipe' : 'URI is local/dev — safe to rebuild');
@@ -327,7 +409,9 @@ async function main(): Promise<void> {
     if (OPTS.checkOnly) {
       log.step(3, 'Running post-seed assertions only (nothing was wiped)');
       const passed = await runAssertions();
-      log.banner(passed ? 'Environment is sane ✅' : 'Environment is NOT sane ❌ — run `npm run reset`');
+      log.banner(
+        passed ? 'Environment is sane ✅' : 'Environment is NOT sane ❌ — run `npm run reset`',
+      );
       await disconnectMongo();
       await resolved.stop();
       process.exit(passed ? 0 : 1);
@@ -345,7 +429,9 @@ async function main(): Promise<void> {
     /* 4. Recreate collections and every index */
     log.step(4, 'Recreating collections and building all indexes');
     const indexes = await syncAllIndexes();
-    log.ok(`${indexes.length} collections, ${indexes.reduce((a, i) => a + i.indexes, 0)} indexes built explicitly`);
+    log.ok(
+      `${indexes.length} collections, ${indexes.reduce((a, i) => a + i.indexes, 0)} indexes built explicitly`,
+    );
 
     /* 5. Seed */
     log.step(5, 'Running seed modules in dependency order');
@@ -375,9 +461,13 @@ async function main(): Promise<void> {
     /* 8. Summary */
     printSummary(counts);
     const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-    log.banner(`Level-0 ready ✅   (${elapsed}s${resolved.source === 'memory' ? ', in-memory MongoDB' : ''})`);
+    log.banner(
+      `Level-0 ready ✅   (${elapsed}s${resolved.source === 'memory' ? ', in-memory MongoDB' : ''})`,
+    );
     if (resolved.source === 'memory') {
-      log.warn('This run used an ephemeral database. Start Docker and re-run for a persistent demo environment:');
+      log.warn(
+        'This run used an ephemeral database. Start Docker and re-run for a persistent demo environment:',
+      );
       log.warn('  sudo systemctl start docker && docker compose up -d mongo && npm run reset');
     }
   } finally {

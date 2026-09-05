@@ -20,6 +20,13 @@ import {
 export const APP_NAME = 'DealFlow360';
 export const APP_TAGLINE = 'An intelligent, self-governing sales operations platform';
 
+/**
+ * The service-level target for how long a quotation should sit in the approval
+ * chain before a human decides it. Drives the "Avg Approval Time" highlight on
+ * the reporting dashboard and the "over SLA" flag on the approval queue.
+ */
+export const APPROVAL_SLA_HOURS = 24;
+
 export const STAGE_LABEL: Record<QuoteStage, string> = {
   DRAFT: 'Draft',
   PENDING_APPROVAL: 'Pending Approval',
@@ -129,15 +136,60 @@ export const STATUS_COLORS = {
 
 /** Internal top navigation, in the mockup's order. */
 export const INTERNAL_NAV: { label: string; route: string; roles: Role[]; screen: number }[] = [
-  { label: 'Dashboard', route: '/app/dashboard', roles: [Role.ADMIN, Role.SALES_REP, Role.SALES_MANAGER, Role.FINANCE], screen: 2 },
-  { label: 'Quotations', route: '/app/quotations', roles: [Role.ADMIN, Role.SALES_REP, Role.SALES_MANAGER, Role.FINANCE], screen: 3 },
-  { label: 'Approvals', route: '/app/approvals', roles: [Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE], screen: 5 },
-  { label: 'Fulfillment', route: '/app/fulfillment', roles: [Role.ADMIN, Role.SALES_REP, Role.SALES_MANAGER, Role.FINANCE], screen: 7 },
-  { label: 'Subscriptions', route: '/app/subscriptions', roles: [Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE], screen: 9 },
-  { label: 'Invoices', route: '/app/invoices', roles: [Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE], screen: 12 },
-  { label: 'Deal Health', route: '/app/deal-health', roles: [Role.ADMIN, Role.SALES_REP, Role.SALES_MANAGER], screen: 14 },
-  { label: 'Reports', route: '/app/reports', roles: [Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE], screen: 15 },
-  { label: 'Products', route: '/admin/products', roles: [Role.ADMIN, Role.SALES_MANAGER], screen: 16 },
+  {
+    label: 'Dashboard',
+    route: '/app/dashboard',
+    roles: [Role.ADMIN, Role.SALES_REP, Role.SALES_MANAGER, Role.FINANCE],
+    screen: 2,
+  },
+  {
+    label: 'Quotations',
+    route: '/app/quotations',
+    roles: [Role.ADMIN, Role.SALES_REP, Role.SALES_MANAGER, Role.FINANCE],
+    screen: 3,
+  },
+  {
+    label: 'Approvals',
+    route: '/app/approvals',
+    roles: [Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE],
+    screen: 5,
+  },
+  {
+    label: 'Fulfillment',
+    route: '/app/fulfillment',
+    roles: [Role.ADMIN, Role.SALES_REP, Role.SALES_MANAGER, Role.FINANCE],
+    screen: 7,
+  },
+  {
+    label: 'Subscriptions',
+    route: '/app/subscriptions',
+    roles: [Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE],
+    screen: 9,
+  },
+  {
+    label: 'Invoices',
+    route: '/app/invoices',
+    roles: [Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE],
+    screen: 12,
+  },
+  {
+    label: 'Deal Health',
+    route: '/app/deal-health',
+    roles: [Role.ADMIN, Role.SALES_REP, Role.SALES_MANAGER],
+    screen: 14,
+  },
+  {
+    label: 'Reports',
+    route: '/app/reports',
+    roles: [Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE],
+    screen: 15,
+  },
+  {
+    label: 'Products',
+    route: '/admin/products',
+    roles: [Role.ADMIN, Role.SALES_MANAGER],
+    screen: 16,
+  },
 ];
 
 /** Portal navigation — deliberately tiny. The customer sees three things. */
@@ -225,22 +277,130 @@ export const SCREEN_REGISTRY: {
   personas: Role[];
   owner: 'A' | 'B' | 'C' | 'D';
 }[] = [
-  { id: 1, name: 'Login / Signup', route: '/login', personas: [Role.ADMIN, Role.SALES_REP, Role.SALES_MANAGER, Role.FINANCE, Role.CUSTOMER], owner: 'A' },
-  { id: 2, name: 'Sales Dashboard', route: '/app/dashboard', personas: [Role.SALES_REP, Role.SALES_MANAGER, Role.ADMIN], owner: 'B' },
-  { id: 3, name: 'Quotations (List)', route: '/app/quotations', personas: [Role.SALES_REP, Role.SALES_MANAGER, Role.ADMIN], owner: 'B' },
-  { id: 4, name: 'Quotation Detail', route: '/app/quotations/:id', personas: [Role.SALES_REP, Role.SALES_MANAGER], owner: 'B' },
-  { id: 5, name: 'Approvals (List)', route: '/app/approvals', personas: [Role.SALES_MANAGER, Role.FINANCE, Role.ADMIN], owner: 'C' },
-  { id: 6, name: 'Approval Detail', route: '/app/approvals/:id', personas: [Role.SALES_MANAGER, Role.FINANCE], owner: 'C' },
-  { id: 7, name: 'Fulfillment and Stock', route: '/app/fulfillment', personas: [Role.FINANCE, Role.SALES_MANAGER, Role.ADMIN], owner: 'D' },
-  { id: 8, name: 'Fulfillment Detail', route: '/app/fulfillment/:id', personas: [Role.FINANCE, Role.SALES_MANAGER], owner: 'D' },
-  { id: 9, name: 'Subscriptions (List)', route: '/app/subscriptions', personas: [Role.FINANCE, Role.SALES_MANAGER, Role.ADMIN], owner: 'D' },
-  { id: 10, name: 'Billing Detail', route: '/app/subscriptions/:id', personas: [Role.FINANCE, Role.SALES_MANAGER], owner: 'D' },
-  { id: 11, name: 'Customer Portal Negotiation', route: '/portal/q/:number', personas: [Role.CUSTOMER], owner: 'C' },
-  { id: 12, name: 'Invoices (List)', route: '/app/invoices', personas: [Role.FINANCE, Role.SALES_MANAGER, Role.ADMIN], owner: 'D' },
-  { id: 13, name: 'Invoice Detail', route: '/app/invoices/:id', personas: [Role.FINANCE, Role.SALES_MANAGER], owner: 'D' },
-  { id: 14, name: 'Deal Health & Anomaly Dashboard', route: '/app/deal-health', personas: [Role.SALES_MANAGER, Role.SALES_REP, Role.ADMIN], owner: 'D' },
-  { id: 15, name: 'Admin / Reporting Dashboard', route: '/app/reports', personas: [Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE], owner: 'D' },
-  { id: 16, name: 'Product Dashboard', route: '/admin/products', personas: [Role.ADMIN, Role.SALES_MANAGER], owner: 'A' },
-  { id: 17, name: 'Product Details', route: '/admin/products/:id', personas: [Role.ADMIN], owner: 'A' },
-  { id: 18, name: 'Discount Tiers & Approval Chain Setup', route: '/admin/config', personas: [Role.ADMIN, Role.SALES_MANAGER], owner: 'A' },
+  {
+    id: 1,
+    name: 'Login / Signup',
+    route: '/login',
+    personas: [Role.ADMIN, Role.SALES_REP, Role.SALES_MANAGER, Role.FINANCE, Role.CUSTOMER],
+    owner: 'A',
+  },
+  {
+    id: 2,
+    name: 'Sales Dashboard',
+    route: '/app/dashboard',
+    personas: [Role.SALES_REP, Role.SALES_MANAGER, Role.ADMIN],
+    owner: 'B',
+  },
+  {
+    id: 3,
+    name: 'Quotations (List)',
+    route: '/app/quotations',
+    personas: [Role.SALES_REP, Role.SALES_MANAGER, Role.ADMIN],
+    owner: 'B',
+  },
+  {
+    id: 4,
+    name: 'Quotation Detail',
+    route: '/app/quotations/:id',
+    personas: [Role.SALES_REP, Role.SALES_MANAGER],
+    owner: 'B',
+  },
+  {
+    id: 5,
+    name: 'Approvals (List)',
+    route: '/app/approvals',
+    personas: [Role.SALES_MANAGER, Role.FINANCE, Role.ADMIN],
+    owner: 'C',
+  },
+  {
+    id: 6,
+    name: 'Approval Detail',
+    route: '/app/approvals/:id',
+    personas: [Role.SALES_MANAGER, Role.FINANCE],
+    owner: 'C',
+  },
+  {
+    id: 7,
+    name: 'Fulfillment and Stock',
+    route: '/app/fulfillment',
+    personas: [Role.FINANCE, Role.SALES_MANAGER, Role.ADMIN],
+    owner: 'D',
+  },
+  {
+    id: 8,
+    name: 'Fulfillment Detail',
+    route: '/app/fulfillment/:id',
+    personas: [Role.FINANCE, Role.SALES_MANAGER],
+    owner: 'D',
+  },
+  {
+    id: 9,
+    name: 'Subscriptions (List)',
+    route: '/app/subscriptions',
+    personas: [Role.FINANCE, Role.SALES_MANAGER, Role.ADMIN],
+    owner: 'D',
+  },
+  {
+    id: 10,
+    name: 'Billing Detail',
+    route: '/app/subscriptions/:id',
+    personas: [Role.FINANCE, Role.SALES_MANAGER],
+    owner: 'D',
+  },
+  {
+    id: 11,
+    name: 'Customer Portal Negotiation',
+    route: '/portal/q/:number',
+    personas: [Role.CUSTOMER],
+    owner: 'C',
+  },
+  {
+    id: 12,
+    name: 'Invoices (List)',
+    route: '/app/invoices',
+    personas: [Role.FINANCE, Role.SALES_MANAGER, Role.ADMIN],
+    owner: 'D',
+  },
+  {
+    id: 13,
+    name: 'Invoice Detail',
+    route: '/app/invoices/:id',
+    personas: [Role.FINANCE, Role.SALES_MANAGER],
+    owner: 'D',
+  },
+  {
+    id: 14,
+    name: 'Deal Health & Anomaly Dashboard',
+    route: '/app/deal-health',
+    personas: [Role.SALES_MANAGER, Role.SALES_REP, Role.ADMIN],
+    owner: 'D',
+  },
+  {
+    id: 15,
+    name: 'Admin / Reporting Dashboard',
+    route: '/app/reports',
+    personas: [Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE],
+    owner: 'D',
+  },
+  {
+    id: 16,
+    name: 'Product Dashboard',
+    route: '/admin/products',
+    personas: [Role.ADMIN, Role.SALES_MANAGER],
+    owner: 'A',
+  },
+  {
+    id: 17,
+    name: 'Product Details',
+    route: '/admin/products/:id',
+    personas: [Role.ADMIN],
+    owner: 'A',
+  },
+  {
+    id: 18,
+    name: 'Discount Tiers & Approval Chain Setup',
+    route: '/admin/config',
+    personas: [Role.ADMIN, Role.SALES_MANAGER],
+    owner: 'A',
+  },
 ];

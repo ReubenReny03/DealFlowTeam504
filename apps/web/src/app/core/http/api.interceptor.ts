@@ -55,6 +55,9 @@ export const apiInterceptor: HttpInterceptorFn = (req, next) => {
         toast.error('Not allowed', message);
       } else if (err.status >= 500) {
         toast.error('Server error', message);
+      } else if (err.status === 409 && apiError?.code === 'STALE_VERSION') {
+        // The caller (the quotation builder) owns this one — it shows a proper
+        // "reload the latest version" dialog rather than a transient toast.
       } else if (err.status !== 404) {
         toast.error('That did not work', message);
       }

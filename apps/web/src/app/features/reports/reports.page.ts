@@ -8,7 +8,12 @@ import { ApiService } from '../../core/api/api.service';
 import { ReportingStore } from '../../core/state/feature.stores';
 import { ToastStore } from '../../core/state/toast.store';
 import { downloadBlob } from '../../shared/download';
-import { ErrorStateComponent, KpiTileComponent, LoadingComponent, MoneyPipe } from '../../shared/ui';
+import {
+  ErrorStateComponent,
+  KpiTileComponent,
+  LoadingComponent,
+  MoneyPipe,
+} from '../../shared/ui';
 import { signal } from '@angular/core';
 
 /** Screen 15 — Admin / Reporting Dashboard, with the PDF's four filters. */
@@ -33,28 +38,36 @@ import { signal } from '@angular/core';
       <label class="block">
         <span class="df-label">Period</span>
         <select class="df-input" [(ngModel)]="period" (ngModelChange)="apply()">
-          <option value="today">Today</option><option value="week">This week</option><option value="month">This month</option>
+          <option value="today">Today</option>
+          <option value="week">This week</option>
+          <option value="month">This month</option>
         </select>
       </label>
       <label class="block">
         <span class="df-label">Sales Rep</span>
         <select class="df-input" [(ngModel)]="repId" (ngModelChange)="apply()">
           <option value="">All reps</option>
-          @for (r of reps(); track r.id) { <option [value]="r.id">{{ r.name }}</option> }
+          @for (r of reps(); track r.id) {
+            <option [value]="r.id">{{ r.name }}</option>
+          }
         </select>
       </label>
       <label class="block">
         <span class="df-label">Approval Status</span>
         <select class="df-input" [(ngModel)]="approvalStatus" (ngModelChange)="apply()">
           <option value="">Any</option>
-          @for (s of approvalStatuses; track s) { <option [value]="s">{{ s }}</option> }
+          @for (s of approvalStatuses; track s) {
+            <option [value]="s">{{ s }}</option>
+          }
         </select>
       </label>
       <label class="block">
         <span class="df-label">Product / Category</span>
         <select class="df-input" [(ngModel)]="category" (ngModelChange)="apply()">
           <option value="">All categories</option>
-          @for (c of categories; track c) { <option [value]="c">{{ c }}</option> }
+          @for (c of categories; track c) {
+            <option [value]="c">{{ c }}</option>
+          }
         </select>
       </label>
     </div>
@@ -65,57 +78,97 @@ import { signal } from '@angular/core';
       <div class="mt-6"><df-error-state [message]="store.error()!" (retry)="apply()" /></div>
     } @else {
       @if (store.dashboard(); as d) {
-      <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <df-kpi-tile label="Quotes Created" [value]="d.quotesCreated" caption="in the selected period" />
-        <df-kpi-tile label="Avg Approval Time" [value]="d.avgApprovalTimeLabel" caption="submit to decision" />
-        <df-kpi-tile label="Top Upsell Product" [value]="d.topUpsellProduct?.name ?? '—'"
-          [caption]="d.topUpsellProduct ? d.topUpsellProduct.timesAdded + ' times added from the panel' : 'no upsells accepted yet'" />
-        <df-kpi-tile label="Conversion" [value]="d.conversionRatePct + '%'" caption="quotes that reached Confirmed" tone="good" />
-      </div>
+        <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <df-kpi-tile
+            label="Quotes Created"
+            [value]="d.quotesCreated"
+            caption="in the selected period"
+          />
+          <df-kpi-tile
+            label="Avg Approval Time"
+            [value]="d.avgApprovalTimeLabel"
+            [tone]="
+              d.avgApprovalTimeMs === 0 ? 'neutral' : d.avgApprovalWithinSla ? 'good' : 'danger'
+            "
+            [caption]="
+              d.avgApprovalTimeMs === 0
+                ? 'no decisions in this period'
+                : (d.avgApprovalWithinSla ? 'within' : 'over') +
+                  ' the ' +
+                  d.avgApprovalSlaHours +
+                  'h SLA target'
+            "
+          />
+          <df-kpi-tile
+            label="Top Upsell Product"
+            [value]="d.topUpsellProduct?.name ?? '—'"
+            [caption]="
+              d.topUpsellProduct
+                ? d.topUpsellProduct.timesAdded + ' times added from the panel'
+                : 'no upsells accepted yet'
+            "
+          />
+          <df-kpi-tile
+            label="Conversion"
+            [value]="d.conversionRatePct + '%'"
+            caption="quotes that reached Confirmed"
+            tone="good"
+          />
+        </div>
 
-      <div class="mt-6 grid gap-6 lg:grid-cols-2">
-        <section>
-          <h2 class="df-h2 mb-3">By sales rep</h2>
-          <div class="df-card df-scroll-x">
-            <table class="min-w-full divide-y divide-slate-200">
-              <thead class="bg-slate-50">
-                <tr><th class="df-th">Rep</th><th class="df-th text-right">Quotes</th><th class="df-th text-right">Value</th><th class="df-th text-right">Avg Discount</th></tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100">
-                @for (r of d.byRep; track r.repId) {
+        <div class="mt-6 grid gap-6 lg:grid-cols-2">
+          <section>
+            <h2 class="df-h2 mb-3">By sales rep</h2>
+            <div class="df-card df-scroll-x">
+              <table class="min-w-full divide-y divide-slate-200">
+                <thead class="bg-slate-50">
                   <tr>
-                    <td class="df-td font-medium text-slate-800">{{ r.repName }}</td>
-                    <td class="df-td text-right font-mono">{{ r.quotes }}</td>
-                    <td class="df-td text-right font-semibold">{{ r.value | money }}</td>
-                    <td class="df-td text-right font-mono">{{ r.avgDiscountPct }}%</td>
+                    <th class="df-th">Rep</th>
+                    <th class="df-th text-right">Quotes</th>
+                    <th class="df-th text-right">Value</th>
+                    <th class="df-th text-right">Avg Discount</th>
                   </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        </section>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  @for (r of d.byRep; track r.repId) {
+                    <tr>
+                      <td class="df-td font-medium text-slate-800">{{ r.repName }}</td>
+                      <td class="df-td text-right font-mono">{{ r.quotes }}</td>
+                      <td class="df-td text-right font-semibold">{{ r.value | money }}</td>
+                      <td class="df-td text-right font-mono">{{ r.avgDiscountPct }}%</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </section>
 
-        <section>
-          <h2 class="df-h2 mb-3">By product</h2>
-          <div class="df-card df-scroll-x">
-            <table class="min-w-full divide-y divide-slate-200">
-              <thead class="bg-slate-50">
-                <tr><th class="df-th">Product</th><th class="df-th text-right">Qty</th><th class="df-th text-right">Value</th><th class="df-th text-right">Avg Discount</th></tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100">
-                @for (p of d.byProduct.slice(0, 10); track p.productId) {
+          <section>
+            <h2 class="df-h2 mb-3">By product</h2>
+            <div class="df-card df-scroll-x">
+              <table class="min-w-full divide-y divide-slate-200">
+                <thead class="bg-slate-50">
                   <tr>
-                    <td class="df-td font-medium text-slate-800">{{ p.name }}</td>
-                    <td class="df-td text-right font-mono">{{ p.qty }}</td>
-                    <td class="df-td text-right font-semibold">{{ p.value | money }}</td>
-                    <td class="df-td text-right font-mono">{{ p.avgDiscountPct }}%</td>
+                    <th class="df-th">Product</th>
+                    <th class="df-th text-right">Qty</th>
+                    <th class="df-th text-right">Value</th>
+                    <th class="df-th text-right">Avg Discount</th>
                   </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  @for (p of d.byProduct.slice(0, 10); track p.productId) {
+                    <tr>
+                      <td class="df-td font-medium text-slate-800">{{ p.name }}</td>
+                      <td class="df-td text-right font-mono">{{ p.qty }}</td>
+                      <td class="df-td text-right font-semibold">{{ p.value | money }}</td>
+                      <td class="df-td text-right font-mono">{{ p.avgDiscountPct }}%</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       }
     }
   `,
@@ -140,7 +193,9 @@ export class ReportsPage implements OnInit {
     try {
       const users = await firstValueFrom(this.api.get<UserDto[]>('/users', { role: 'SALES_REP' }));
       this.reps.set(users ?? []);
-    } catch { /* the filter simply shows "All reps" */ }
+    } catch {
+      /* the filter simply shows "All reps" */
+    }
   }
 
   apply(): void {
@@ -163,7 +218,11 @@ export class ReportsPage implements OnInit {
     const path = isPdf ? 'export.pdf' : 'export.xlsx';
     const ext = isPdf ? 'pdf' : 'xlsx';
     try {
-      const blob = await firstValueFrom(this.http.get(`${environment.apiBase}/reporting/${path}?${params}`, { responseType: 'blob' }));
+      const blob = await firstValueFrom(
+        this.http.get(`${environment.apiBase}/reporting/${path}?${params}`, {
+          responseType: 'blob',
+        }),
+      );
       downloadBlob(blob, `dealflow360-reporting.${ext}`);
     } catch {
       this.toast.error(`Could not export ${kind.toUpperCase()}`, 'Please try again.');

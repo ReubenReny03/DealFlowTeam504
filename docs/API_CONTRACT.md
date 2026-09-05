@@ -12,12 +12,15 @@ Per-module status, including what is still to build and who owns it:
 **Every response** uses the same envelope:
 
 ```json
-{ "success": true, "data": { }, "error": null, "meta": { } }
+{ "success": true, "data": {}, "error": null, "meta": {} }
 ```
 
 ```json
-{ "success": false, "data": null,
-  "error": { "code": "VALIDATION_ERROR", "message": "…", "details": [] } }
+{
+  "success": false,
+  "data": null,
+  "error": { "code": "VALIDATION_ERROR", "message": "…", "details": [] }
+}
 ```
 
 - **Auth:** `Authorization: Bearer <jwt>` for everything internal.
@@ -33,19 +36,19 @@ Per-module status, including what is still to build and who owns it:
 
 ### Error codes
 
-| Code | HTTP | When |
-|---|---|---|
-| `VALIDATION_ERROR` | 400 | the body or query did not match the schema |
-| `UNAUTHENTICATED` | 401 | missing, invalid or expired JWT |
-| `FORBIDDEN` | 403 | authenticated, but not allowed |
-| `NOT_FOUND` | 404 | no such record, or no such route |
-| `CONFLICT` | 409 | a unique constraint was violated |
-| `STALE_VERSION` | 409 | the quotation changed while you were editing it |
-| `INSUFFICIENT_STOCK` | 409 | an allocation asked for more than is available |
-| `INVALID_STATE` | 409 | the action is not legal from the current state |
-| `PORTAL_TOKEN_INVALID` | 403 | unknown or revoked portal token |
-| `PORTAL_TOKEN_EXPIRED` | 403 | the magic link has expired |
-| `INTERNAL_ERROR` | 500 | anything unhandled |
+| Code                   | HTTP | When                                            |
+| ---------------------- | ---- | ----------------------------------------------- |
+| `VALIDATION_ERROR`     | 400  | the body or query did not match the schema      |
+| `UNAUTHENTICATED`      | 401  | missing, invalid or expired JWT                 |
+| `FORBIDDEN`            | 403  | authenticated, but not allowed                  |
+| `NOT_FOUND`            | 404  | no such record, or no such route                |
+| `CONFLICT`             | 409  | a unique constraint was violated                |
+| `STALE_VERSION`        | 409  | the quotation changed while you were editing it |
+| `INSUFFICIENT_STOCK`   | 409  | an allocation asked for more than is available  |
+| `INVALID_STATE`        | 409  | the action is not legal from the current state  |
+| `PORTAL_TOKEN_INVALID` | 403  | unknown or revoked portal token                 |
+| `PORTAL_TOKEN_EXPIRED` | 403  | the magic link has expired                      |
+| `INTERNAL_ERROR`       | 500  | anything unhandled                              |
 
 **Status legend:** ✅ implemented · 🔨 owned by an agent, not built yet
 
@@ -53,27 +56,35 @@ Per-module status, including what is still to build and who owns it:
 
 ## Health — Agent A
 
-| M | Path | Auth | Status |
-|---|---|---|---|
-| GET | `/health` | none | ✅ |
-| GET | `/_routes` | none | ✅ |
-| GET | `/<module>/_health` | none | ✅ |
+| M   | Path                | Auth | Status |
+| --- | ------------------- | ---- | ------ |
+| GET | `/health`           | none | ✅     |
+| GET | `/_routes`          | none | ✅     |
+| GET | `/<module>/_health` | none | ✅     |
 
 ```json
-{ "success": true, "data": { "status": "ok", "uptimeSeconds": 19,
-  "mongo": "connected", "timestamp": "2026-09-05T08:05:37.904Z" }, "error": null }
+{
+  "success": true,
+  "data": {
+    "status": "ok",
+    "uptimeSeconds": 19,
+    "mongo": "connected",
+    "timestamp": "2026-09-05T08:05:37.904Z"
+  },
+  "error": null
+}
 ```
 
 ---
 
 ## Auth — Agent A · screen 1
 
-| M | Path | Auth | Request | Response | Status |
-|---|---|---|---|---|---|
-| POST | `/auth/login` | none | `LoginRequest` | `AuthSessionDto` | ✅ |
-| POST | `/auth/signup` | none | `SignupRequest` | `AuthSessionDto` | ✅ |
-| GET | `/auth/me` | any | — | `UserDto` | ✅ |
-| GET | `/auth/demo-accounts` | none | — | `DemoAccountDto[]` | ✅ |
+| M    | Path                  | Auth | Request         | Response           | Status |
+| ---- | --------------------- | ---- | --------------- | ------------------ | ------ |
+| POST | `/auth/login`         | none | `LoginRequest`  | `AuthSessionDto`   | ✅     |
+| POST | `/auth/signup`        | none | `SignupRequest` | `AuthSessionDto`   | ✅     |
+| GET  | `/auth/me`            | any  | —               | `UserDto`          | ✅     |
+| GET  | `/auth/demo-accounts` | none | —               | `DemoAccountDto[]` | ✅     |
 
 `POST /auth/login`
 
@@ -82,12 +93,22 @@ Per-module status, including what is still to build and who owns it:
 ```
 
 ```json
-{ "success": true, "error": null, "data": {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…",
-  "expiresAt": "2026-09-05T20:05:37.000Z",
-  "user": { "id": "a10002000000000000000000", "name": "J. Rao",
-            "email": "rep@dealflow360.test", "role": "SALES_REP",
-            "active": true, "landingRoute": "/app/dashboard" } } }
+{
+  "success": true,
+  "error": null,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…",
+    "expiresAt": "2026-09-05T20:05:37.000Z",
+    "user": {
+      "id": "a10002000000000000000000",
+      "name": "J. Rao",
+      "email": "rep@dealflow360.test",
+      "role": "SALES_REP",
+      "active": true,
+      "landingRoute": "/app/dashboard"
+    }
+  }
+}
 ```
 
 A customer login also carries `portalQuotationId`, so the portal can open their
@@ -101,28 +122,42 @@ nothing leaks about which half was wrong.
 
 ## Configuration — Agent A · screen 18
 
-| M | Path | Auth | Request | Response | Status |
-|---|---|---|---|---|---|
-| GET | `/config` | any | — | `ApprovalChainConfigDto` | ✅ |
-| PUT | `/config` | ADMIN, SALES_MANAGER | `UpdateApprovalConfigRequest` | `ConfigChangeImpactDto` | ✅ |
-| GET | `/config/allowed-discount?tier=&category=` | any | — | `{tierCeiling, categoryCeiling, allowed}` | ✅ |
+| M   | Path                                       | Auth                 | Request                       | Response                                  | Status |
+| --- | ------------------------------------------ | -------------------- | ----------------------------- | ----------------------------------------- | ------ |
+| GET | `/config`                                  | any                  | —                             | `ApprovalChainConfigDto`                  | ✅     |
+| PUT | `/config`                                  | ADMIN, SALES_MANAGER | `UpdateApprovalConfigRequest` | `ConfigChangeImpactDto`                   | ✅     |
+| GET | `/config/allowed-discount?tier=&category=` | any                  | —                             | `{tierCeiling, categoryCeiling, allowed}` | ✅     |
 
 `PUT /config` — **this is the endpoint that proves nothing is hardcoded.**
 
 ```json
-{ "tierCeilings":     { "GOLD": 20 },
+{
+  "tierCeilings": { "GOLD": 20 },
   "categoryCeilings": { "SERVICES": 20 },
-  "reason": "Q4 pricing policy — services discretion raised" }
+  "reason": "Q4 pricing policy — services discretion raised"
+}
 ```
 
 ```json
-{ "success": true, "error": null, "data": {
-  "config": { "…": "the saved configuration" },
-  "reevaluated": [
-    { "quotationId": "b11042000000000000000000", "quotationNumber": "Q-1042",
-      "previousScore": 33, "previousLevel": "HIGH",
-      "newScore": 0, "newLevel": "NONE", "autoApproved": true }
-  ] }, "meta": { "reevaluatedCount": 4 } }
+{
+  "success": true,
+  "error": null,
+  "data": {
+    "config": { "…": "the saved configuration" },
+    "reevaluated": [
+      {
+        "quotationId": "b11042000000000000000000",
+        "quotationNumber": "Q-1042",
+        "previousScore": 33,
+        "previousLevel": "HIGH",
+        "newScore": 0,
+        "newLevel": "NONE",
+        "autoApproved": true
+      }
+    ]
+  },
+  "meta": { "reevaluatedCount": 4 }
+}
 ```
 
 It re-prices and re-scores every open quotation, auto-approves any that no longer
@@ -135,21 +170,21 @@ Errors: `400` if `reason` is missing · `404` if governance has never been saved
 
 ## Catalogue and configuration data — Agent A
 
-| M | Path | Auth | Response | Status |
-|---|---|---|---|---|
-| GET | `/products` | any | `ProductDto[]` | ✅ |
-| GET | `/products/:id` | any | `ProductDto` | ✅ |
-| GET | `/products/dashboard` | any | `ProductDashboardDto` | ✅ |
-| POST | `/products` | ADMIN | `ProductDto` | ✅ |
-| PUT | `/products/:id` | ADMIN | `ProductDto` | ✅ |
-| GET | `/pricelists` · `/pricelists/:id` | any | `PriceListDto` | ✅ |
-| PUT | `/pricelists/:id` | ADMIN | `PriceListDto` | ✅ |
-| GET | `/warehouses` · `/warehouses/:id` | any | `WarehouseDto` | ✅ |
-| POST · PUT | `/warehouses` · `/warehouses/:id` | ADMIN | `WarehouseDto` | ✅ |
-| GET | `/subscription-plans` | any | `SubscriptionPlanDto[]` | ✅ |
-| POST | `/subscription-plans` | ADMIN | `SubscriptionPlanDto` | ✅ |
-| GET | `/customers` · `/customers/:id` | any | `CustomerDto` | ✅ |
-| GET | `/users?role=` | ADMIN | `UserDto[]` | ✅ |
+| M          | Path                              | Auth  | Response                | Status |
+| ---------- | --------------------------------- | ----- | ----------------------- | ------ |
+| GET        | `/products`                       | any   | `ProductDto[]`          | ✅     |
+| GET        | `/products/:id`                   | any   | `ProductDto`            | ✅     |
+| GET        | `/products/dashboard`             | any   | `ProductDashboardDto`   | ✅     |
+| POST       | `/products`                       | ADMIN | `ProductDto`            | ✅     |
+| PUT        | `/products/:id`                   | ADMIN | `ProductDto`            | ✅     |
+| GET        | `/pricelists` · `/pricelists/:id` | any   | `PriceListDto`          | ✅     |
+| PUT        | `/pricelists/:id`                 | ADMIN | `PriceListDto`          | ✅     |
+| GET        | `/warehouses` · `/warehouses/:id` | any   | `WarehouseDto`          | ✅     |
+| POST · PUT | `/warehouses` · `/warehouses/:id` | ADMIN | `WarehouseDto`          | ✅     |
+| GET        | `/subscription-plans`             | any   | `SubscriptionPlanDto[]` | ✅     |
+| POST       | `/subscription-plans`             | ADMIN | `SubscriptionPlanDto`   | ✅     |
+| GET        | `/customers` · `/customers/:id`   | any   | `CustomerDto`           | ✅     |
+| GET        | `/users?role=`                    | ADMIN | `UserDto[]`             | ✅     |
 
 Filters: `/products?category=&status=&q=` · `/customers?tier=&ownerId=&q=`
 
@@ -157,24 +192,35 @@ Filters: `/products?category=&status=&q=` · `/customers?tier=&ownerId=&q=`
 
 ## Quotations — Agent B · screens 2, 3, 4
 
-| M | Path | Auth | Request | Response | Status |
-|---|---|---|---|---|---|
-| GET | `/quotations` | any | `QuotationListQuery` | `QuotationDto[]` | ✅ |
-| GET | `/quotations/:id` | any | — | `QuotationDto` | ✅ |
-| GET | `/quotations/board` | any | `?ownerId=` | `KanbanBoardDto` | ✅ |
-| GET | `/quotations/dashboard` | any | — | `SalesDashboardDto` | ✅ |
-| GET | `/quotations/:id/audit` | any | — | `AuditLogDto[]` | ✅ |
-| POST | `/quotations` | REP, MGR, ADMIN | `CreateQuotationRequest` | `QuotationDto` | ✅ |
-| PATCH | `/quotations/:id` | REP, MGR, ADMIN | `UpdateQuotationRequest` | `QuotationDto` | ✅ |
-| POST | `/quotations/preview` | REP, MGR, ADMIN | `PreviewQuotationRequest` | `QuotationPreviewDto` | ✅ |
-| POST | `/quotations/:id/submit` | REP, MGR, ADMIN | — | `SubmitQuotationResponse` | ✅ |
+| M     | Path                          | Auth            | Request                    | Response                    | Status |
+| ----- | ----------------------------- | --------------- | -------------------------- | --------------------------- | ------ |
+| GET   | `/quotations`                 | any             | `QuotationListQuery`       | `QuotationDto[]`            | ✅     |
+| GET   | `/quotations/:id`             | any             | —                          | `QuotationDto`              | ✅     |
+| GET   | `/quotations/board`           | any             | `?ownerId=`                | `KanbanBoardDto`            | ✅     |
+| GET   | `/quotations/dashboard`       | any             | —                          | `SalesDashboardDto`         | ✅     |
+| GET   | `/quotations/:id/audit`       | any             | —                          | `AuditLogDto[]`             | ✅     |
+| POST  | `/quotations`                 | REP, MGR, ADMIN | `CreateQuotationRequest`   | `QuotationDto`              | ✅     |
+| PATCH | `/quotations/:id`             | REP, MGR, ADMIN | `UpdateQuotationRequest`   | `QuotationDto`              | ✅     |
+| POST  | `/quotations/preview`         | REP, MGR, ADMIN | `PreviewQuotationRequest`  | `QuotationPreviewDto`       | ✅     |
+| POST  | `/quotations/:id/submit`      | REP, MGR, ADMIN | —                          | `SubmitQuotationResponse`   | ✅     |
+| POST  | `/quotations/:id/portal-link` | REP, MGR, ADMIN | `ReissuePortalLinkRequest` | `ReissuePortalLinkResponse` | ✅     |
 
 `PATCH /quotations/:id` — **must** send the `version` last read.
 
+`POST /quotations/:id/portal-link` (Phase E) — reissue the customer's magic link.
+Revokes **every** non-revoked `PortalToken` for the quotation and mints one fresh
+14-day link for the customer's portal contact. `409 INVALID_STATE` for a `DRAFT`
+or `REJECTED` quotation. Response: `{ token, url: "/portal/q/<number>?token=…",
+expiresAt, revokedCount }`.
+
 ```json
-{ "version": 3,
-  "lines": [ { "id": "Q-1042-L1", "productId": "a30001…", "qty": 2, "discountPct": 12 },
-             { "productId": "a30002…", "qty": 1, "discountPct": 18 } ] }
+{
+  "version": 3,
+  "lines": [
+    { "id": "Q-1042-L1", "productId": "a30001…", "qty": 2, "discountPct": 12 },
+    { "productId": "a30002…", "qty": 1, "discountPct": 18 }
+  ]
+}
 ```
 
 A line with no `id` is added; an omitted line is removed. A stale `version`
@@ -185,22 +231,54 @@ It recomputes the blended risk server-side and **either** auto-approves **or**
 opens the approval chain. The rep never chooses.
 
 ```json
-{ "success": true, "error": null, "data": {
-  "quotation": { "stage": "PENDING_APPROVAL", "…": "…" },
-  "approval": { "id": "b21042…", "status": "PENDING",
-                "currentStage": "SALES_MANAGER", "assignedToName": "M. Shah",
-                "steps": [ { "role": "SALES_MANAGER", "status": "ACTIVE" },
-                           { "role": "FINANCE", "status": "PENDING" } ] },
-  "autoApproved": false,
-  "risk": { "riskScore": 33, "riskLevel": "HIGH",
-            "requiredChain": ["SALES_MANAGER", "FINANCE"],
-            "blendedOverPct": 1.26, "maxSingleOver": 8,
-            "explanation": [
-              { "lineId": "Q-1042-L1", "line": "Laptop Pro 14", "category": "HARDWARE",
-                "given": 12, "allowed": 15, "overBy": 0, "status": "OK", "weight": 0.84 },
-              { "lineId": "Q-1042-L2", "line": "Onsite Setup Service", "category": "SERVICES",
-                "given": 18, "allowed": 10, "overBy": 8, "status": "OVER", "weight": 0.16 } ],
-            "summary": "1 of 2 lines exceed their own limit. Worst line is …" } } }
+{
+  "success": true,
+  "error": null,
+  "data": {
+    "quotation": { "stage": "PENDING_APPROVAL", "…": "…" },
+    "approval": {
+      "id": "b21042…",
+      "status": "PENDING",
+      "currentStage": "SALES_MANAGER",
+      "assignedToName": "M. Shah",
+      "steps": [
+        { "role": "SALES_MANAGER", "status": "ACTIVE" },
+        { "role": "FINANCE", "status": "PENDING" }
+      ]
+    },
+    "autoApproved": false,
+    "risk": {
+      "riskScore": 33,
+      "riskLevel": "HIGH",
+      "requiredChain": ["SALES_MANAGER", "FINANCE"],
+      "blendedOverPct": 1.26,
+      "maxSingleOver": 8,
+      "explanation": [
+        {
+          "lineId": "Q-1042-L1",
+          "line": "Laptop Pro 14",
+          "category": "HARDWARE",
+          "given": 12,
+          "allowed": 15,
+          "overBy": 0,
+          "status": "OK",
+          "weight": 0.84
+        },
+        {
+          "lineId": "Q-1042-L2",
+          "line": "Onsite Setup Service",
+          "category": "SERVICES",
+          "given": 18,
+          "allowed": 10,
+          "overBy": 8,
+          "status": "OVER",
+          "weight": 0.16
+        }
+      ],
+      "summary": "1 of 2 lines exceed their own limit. Worst line is …"
+    }
+  }
+}
 ```
 
 When risk is 0: `autoApproved: true`, `approval: null`, stage `APPROVED`.
@@ -209,20 +287,28 @@ When risk is 0: `autoApproved: true`, `approval: null`, stage `APPROVED`.
 
 ## Pricing, risk and upsell — Agent B
 
-| M | Path | Auth | Request | Response | Status |
-|---|---|---|---|---|---|
-| POST | `/pricing/preview` | any | `{customerId, lines[]}` | priced lines + totals | ✅ |
-| POST | `/risk/preview` | any | `{customerId, lines[]}` | `RiskAssessmentDto` | ✅ |
-| GET | `/upsell/suggestions?quotationId=` | any | — | `UpsellSuggestionDto[]` | ✅ |
+| M    | Path                               | Auth | Request                 | Response                | Status |
+| ---- | ---------------------------------- | ---- | ----------------------- | ----------------------- | ------ |
+| POST | `/pricing/preview`                 | any  | `{customerId, lines[]}` | priced lines + totals   | ✅     |
+| POST | `/risk/preview`                    | any  | `{customerId, lines[]}` | `RiskAssessmentDto`     | ✅     |
+| GET  | `/upsell/suggestions?quotationId=` | any  | —                       | `UpsellSuggestionDto[]` | ✅     |
 
 ```json
-[ { "productId": "a30005…", "name": "Wireless Mouse", "sku": "WM-001",
-    "category": "HARDWARE", "unitPrice": 3000, "marginDelta": 1800,
+[
+  {
+    "productId": "a30005…",
+    "name": "Wireless Mouse",
+    "sku": "WM-001",
+    "category": "HARDWARE",
+    "unitPrice": 3000,
+    "marginDelta": 1800,
     "reason": "Bought alongside Laptop Pro 14 in 78% of past deals; adds 1800 minor units of margin.",
-    "score": 0.69 } ]
+    "score": 0.69
+  }
+]
 ```
 
-> The preview endpoints exist so the server can *confirm* the client's optimistic
+> The preview endpoints exist so the server can _confirm_ the client's optimistic
 > numbers, not so the client can ask for them. The Angular builder computes
 > totals, margin and risk locally from the same shared pure functions, and only
 > reconciles on save.
@@ -231,18 +317,20 @@ When risk is 0: `autoApproved: true`, `approval: null`, stage `APPROVED`.
 
 ## Approvals and audit — Agent C · screens 5, 6
 
-| M | Path | Auth | Request | Response | Status |
-|---|---|---|---|---|---|
-| GET | `/approvals` | MGR, FIN, ADMIN, REP | `ApprovalListQuery` | `ApprovalListDto` | ✅ |
-| GET | `/approvals/:id` | MGR, FIN, ADMIN, REP | — | `ApprovalDto` | ✅ |
-| GET | `/approvals/:id/trail` | MGR, FIN, ADMIN, REP | — | `{trail, auditLog}` | ✅ |
-| POST | `/approvals/:id/approve` | MGR, FIN | `{reason}` | `ApprovalDto` | 🔨 C |
-| POST | `/approvals/:id/return` | MGR, FIN | `{reason}` | `ApprovalDto` | 🔨 C |
-| POST | `/approvals/:id/reject` | MGR, FIN | `{reason}` | `ApprovalDto` | 🔨 C |
-| GET | `/audit?entity=&entityId=&actorId=` | any | — | `AuditLogDto[]` | ✅ |
+| M    | Path                                | Auth                 | Request             | Response            | Status |
+| ---- | ----------------------------------- | -------------------- | ------------------- | ------------------- | ------ |
+| GET  | `/approvals`                        | MGR, FIN, ADMIN, REP | `ApprovalListQuery` | `ApprovalListDto`   | ✅     |
+| GET  | `/approvals/:id`                    | MGR, FIN, ADMIN, REP | —                   | `ApprovalDto`       | ✅     |
+| GET  | `/approvals/:id/trail`              | MGR, FIN, ADMIN, REP | —                   | `{trail, auditLog}` | ✅     |
+| POST | `/approvals/:id/approve`            | MGR, FIN             | `{reason}`          | `ApprovalDto`       | 🔨 C   |
+| POST | `/approvals/:id/return`             | MGR, FIN             | `{reason}`          | `ApprovalDto`       | 🔨 C   |
+| POST | `/approvals/:id/reject`             | MGR, FIN             | `{reason}`          | `ApprovalDto`       | 🔨 C   |
+| GET  | `/audit?entity=&entityId=&actorId=` | any                  | —                   | `AuditLogDto[]`     | ✅     |
 
 `GET /approvals?pendingOnly=true` · `?assignedToMe=true` filters to the caller's
-own role queue — which is what Finance wants on login.
+own role queue — which is what Finance wants on login. It also accepts
+`?page=&pageSize=` and returns `{ page, pageSize, total, totalPages }` in `meta`
+(default page size 50) — as do `GET /subscriptions` and `GET /invoices`.
 
 All three decision endpoints require a non-empty `reason` and write an
 `AuditLog`. **Approve** advances to the next step, or completes the approval and
@@ -258,30 +346,45 @@ if the approval is already decided.
 
 **A separate surface with a separate credential.** An internal JWT is refused.
 
-| M | Path | Auth | Request | Response | Status |
-|---|---|---|---|---|---|
-| GET | `/portal/q/:number` | portal token or CUSTOMER | — | `PortalResolveResponse` | ✅ |
-| GET | `/portal/q/:number/messages` | portal token or CUSTOMER | — | `NegotiationEventDto[]` | ✅ |
-| POST | `/portal/q/:number/comment` | portal token or CUSTOMER | `PortalCommentRequest` | `NegotiationEventDto` | 🔨 C |
-| POST | `/portal/q/:number/counter` | portal token or CUSTOMER | `PortalCounterRequest` | `PortalCounterResponse` | 🔨 C |
-| POST | `/portal/q/:number/confirm` | portal token or CUSTOMER | — | `PortalConfirmResponse` | 🔨 C |
+| M    | Path                         | Auth                     | Request                | Response                | Status |
+| ---- | ---------------------------- | ------------------------ | ---------------------- | ----------------------- | ------ |
+| GET  | `/portal/q/:number`          | portal token or CUSTOMER | —                      | `PortalResolveResponse` | ✅     |
+| GET  | `/portal/q/:number/messages` | portal token or CUSTOMER | —                      | `NegotiationEventDto[]` | ✅     |
+| POST | `/portal/q/:number/comment`  | portal token or CUSTOMER | `PortalCommentRequest` | `NegotiationEventDto`   | 🔨 C   |
+| POST | `/portal/q/:number/counter`  | portal token or CUSTOMER | `PortalCounterRequest` | `PortalCounterResponse` | 🔨 C   |
+| POST | `/portal/q/:number/confirm`  | portal token or CUSTOMER | —                      | `PortalConfirmResponse` | 🔨 C   |
 
 `POST /portal/q/Q-1042/counter` — **the re-approval loop.**
 
 ```json
-{ "lines": [ { "lineId": "Q-1042-L2", "counterDiscountPct": 25,
-               "comment": "Can you do better on the setup fee?" } ],
-  "requestedDeliveryDate": "2026-10-01T00:00:00.000Z" }
+{
+  "lines": [
+    {
+      "lineId": "Q-1042-L2",
+      "counterDiscountPct": 25,
+      "comment": "Can you do better on the setup fee?"
+    }
+  ],
+  "requestedDeliveryDate": "2026-10-01T00:00:00.000Z"
+}
 ```
 
 ```json
-{ "success": true, "error": null, "data": {
-  "quotation": { "stage": "PENDING_APPROVAL", "…": "…" },
-  "risk": { "riskScore": 52, "riskLevel": "HIGH", "…": "…" },
-  "reEnteredApproval": true,
-  "approval": { "status": "PENDING", "reEnteredFromNegotiation": true,
-                "currentStage": "SALES_MANAGER" },
-  "message": "Your proposal goes beyond what your account manager can approve alone, so it has gone back for internal approval automatically." } }
+{
+  "success": true,
+  "error": null,
+  "data": {
+    "quotation": { "stage": "PENDING_APPROVAL", "…": "…" },
+    "risk": { "riskScore": 52, "riskLevel": "HIGH", "…": "…" },
+    "reEnteredApproval": true,
+    "approval": {
+      "status": "PENDING",
+      "reEnteredFromNegotiation": true,
+      "currentStage": "SALES_MANAGER"
+    },
+    "message": "Your proposal goes beyond what your account manager can approve alone, so it has gone back for internal approval automatically."
+  }
+}
 ```
 
 The server applies the counter, recomputes the blended risk, and — if it now
@@ -295,47 +398,64 @@ returns `reEnteredApproval: true` with a null order.
 
 **Security, tested in `npm run smoke` step 7:**
 
-| Caller | Result |
-|---|---|
-| Priya's magic link on Q-1042 | `200` |
+| Caller                              | Result                                             |
+| ----------------------------------- | -------------------------------------------------- |
+| Priya's magic link on Q-1042        | `200`                                              |
 | R. Das (Beta Industries), signed in | `403 FORBIDDEN` — "belongs to a different company" |
-| An internal `SALES_REP` JWT | `403 PORTAL_TOKEN_INVALID` |
-| The seeded expired token | `403 PORTAL_TOKEN_EXPIRED` |
+| An internal `SALES_REP` JWT         | `403 PORTAL_TOKEN_INVALID`                         |
+| The seeded expired token            | `403 PORTAL_TOKEN_EXPIRED`                         |
 
 ---
 
 ## Fulfillment and stock — Agent D · screens 7, 8
 
-| M | Path | Auth | Request | Response | Status |
-|---|---|---|---|---|---|
-| GET | `/fulfillment` | internal | — | `FulfillmentListDto` | ✅ |
-| GET | `/fulfillment/:id` | internal | — | `FulfillmentDto` | ✅ |
-| POST | `/fulfillment/plan/:orderId` | internal | — | `FulfillmentDto` | 🔨 D |
-| POST | `/fulfillment/:id/accept` | internal | — | `AcceptSplitResponse` | 🔨 D |
-| POST | `/fulfillment/:id/override` | MGR, FIN, ADMIN | `ManualSplitOverrideRequest` | `FulfillmentDto` | 🔨 D |
-| POST | `/fulfillment/:id/ship` | internal | `{warehouseId}` | `FulfillmentDto` | 🔨 D |
-| GET | `/fulfillment/:id/consolidation` | internal | — | `{available, coveredBy[]}` | 🔨 D |
-| GET | `/stock` | internal | `?warehouseId=&productId=` | `StockDto[]` | ✅ |
-| POST | `/stock/adjust` | ADMIN, FIN | `AdjustStockRequest` | `StockDto` | 🔨 D |
-| GET | `/orders` · `/orders/:id` | internal | — | `OrderDto` | ✅ |
-| POST | `/orders/from-quotation/:id` | internal | — | `OrderDto` | 🔨 D |
+| M    | Path                             | Auth            | Request                      | Response                   | Status |
+| ---- | -------------------------------- | --------------- | ---------------------------- | -------------------------- | ------ |
+| GET  | `/fulfillment`                   | internal        | —                            | `FulfillmentListDto`       | ✅     |
+| GET  | `/fulfillment/:id`               | internal        | —                            | `FulfillmentDto`           | ✅     |
+| POST | `/fulfillment/plan/:orderId`     | internal        | —                            | `FulfillmentDto`           | 🔨 D   |
+| POST | `/fulfillment/:id/accept`        | internal        | —                            | `AcceptSplitResponse`      | 🔨 D   |
+| POST | `/fulfillment/:id/override`      | MGR, FIN, ADMIN | `ManualSplitOverrideRequest` | `FulfillmentDto`           | 🔨 D   |
+| POST | `/fulfillment/:id/ship`          | internal        | `{warehouseId}`              | `FulfillmentDto`           | 🔨 D   |
+| GET  | `/fulfillment/:id/consolidation` | internal        | —                            | `{available, coveredBy[]}` | 🔨 D   |
+| GET  | `/stock`                         | internal        | `?warehouseId=&productId=`   | `StockDto[]`               | ✅     |
+| POST | `/stock/adjust`                  | ADMIN, FIN      | `AdjustStockRequest`         | `StockDto`                 | 🔨 D   |
+| GET  | `/orders` · `/orders/:id`        | internal        | —                            | `OrderDto`                 | ✅     |
+| POST | `/orders/from-quotation/:id`     | internal        | —                            | `OrderDto`                 | 🔨 D   |
 
 `FulfillmentDto` always carries a non-empty `rationale`:
 
 ```json
-{ "orderNumber": "ORD-1032", "status": "SPLIT_PENDING",
+{
+  "orderNumber": "ORD-1032",
+  "status": "SPLIT_PENDING",
   "allocations": [
-    { "warehouseName": "Main Warehouse", "qty": 18, "estShipments": 1, "estCost": 4200,
-      "lines": [ { "lineId": "…", "productName": "Laptop Pro 14", "qty": 18 } ] },
-    { "warehouseName": "East Depot", "qty": 6, "estShipments": 1, "estCost": 2600,
-      "lines": [ { "lineId": "…", "productName": "Laptop Pro 14", "qty": 6 } ] } ],
-  "backorders": [], "totalShipments": 2, "totalCost": 6800,
+    {
+      "warehouseName": "Main Warehouse",
+      "qty": 18,
+      "estShipments": 1,
+      "estCost": 4200,
+      "lines": [{ "lineId": "…", "productName": "Laptop Pro 14", "qty": 18 }]
+    },
+    {
+      "warehouseName": "East Depot",
+      "qty": 6,
+      "estShipments": 1,
+      "estCost": 2600,
+      "lines": [{ "lineId": "…", "productName": "Laptop Pro 14", "qty": 6 }]
+    }
+  ],
+  "backorders": [],
+  "totalShipments": 2,
+  "totalCost": 6800,
   "rationale": [
     "No single warehouse can cover the whole order (24 units across 1 line), so the order is being split.",
     "Warehouses ranked by (lines fully coverable DESC, shipping cost weight ASC): Main Warehouse [weight 1] > East Depot [weight 1.4].",
     "Main Warehouse covers a partial remainder of 18 unit(s): Laptop Pro 14 x18.",
     "East Depot covers a partial remainder of 6 unit(s): Laptop Pro 14 x6.",
-    "Final plan: 2 warehouse(s), 2 shipment(s), estimated cost 6800 minor units, 0 unit(s) on backorder." ] }
+    "Final plan: 2 warehouse(s), 2 shipment(s), estimated cost 6800 minor units, 0 unit(s) on backorder."
+  ]
+}
 ```
 
 `POST /fulfillment/:id/override` requires a `reason`, validates against live
@@ -349,19 +469,19 @@ backorder to `CONSOLIDATION_AVAILABLE`, which is what raises screen 8's banner.
 
 ## Billing — Agent D · screens 9, 10, 12, 13
 
-| M | Path | Auth | Request | Response | Status |
-|---|---|---|---|---|---|
-| GET | `/subscriptions` | internal | `?status=&customerId=` | `SubscriptionListDto` | ✅ |
-| GET | `/subscriptions/:id` | internal | — | `SubscriptionDto` | ✅ |
-| POST | `/subscriptions/:id/modify` | MGR, FIN | `ModifySubscriptionRequest` | `ModifySubscriptionResponse` | 🔨 D |
-| POST | `/subscriptions/:id/cancel` | MGR, FIN | `CancelSubscriptionRequest` | `CancelSubscriptionResponse` | 🔨 D |
-| GET | `/billing/subscription/:id` | internal | — | `BillingDetailDto` | ✅ |
-| POST | `/billing/run-schedule` | FIN, ADMIN | — | `InvoiceDto[]` | 🔨 D |
-| GET | `/invoices` | internal | `?status=&customerId=` | `InvoiceListDto` | ✅ |
-| GET | `/invoices/:id` | internal | — | `{invoice, order, relatedInvoices}` | ✅ |
-| POST | `/invoices/generate/:orderId` | FIN, ADMIN | — | `InvoiceDto` | 🔨 D |
-| POST | `/invoices/:id/payments` | MGR, FIN, ADMIN | `RecordPaymentRequest` | `InvoiceDto` | 🔨 D |
-| GET | `/invoices/:id/summary.csv` | internal | — | `text/csv` | 🔨 D |
+| M    | Path                          | Auth            | Request                     | Response                            | Status |
+| ---- | ----------------------------- | --------------- | --------------------------- | ----------------------------------- | ------ |
+| GET  | `/subscriptions`              | internal        | `?status=&customerId=`      | `SubscriptionListDto`               | ✅     |
+| GET  | `/subscriptions/:id`          | internal        | —                           | `SubscriptionDto`                   | ✅     |
+| POST | `/subscriptions/:id/modify`   | MGR, FIN        | `ModifySubscriptionRequest` | `ModifySubscriptionResponse`        | 🔨 D   |
+| POST | `/subscriptions/:id/cancel`   | MGR, FIN        | `CancelSubscriptionRequest` | `CancelSubscriptionResponse`        | 🔨 D   |
+| GET  | `/billing/subscription/:id`   | internal        | —                           | `BillingDetailDto`                  | ✅     |
+| POST | `/billing/run-schedule`       | FIN, ADMIN      | —                           | `InvoiceDto[]`                      | 🔨 D   |
+| GET  | `/invoices`                   | internal        | `?status=&customerId=`      | `InvoiceListDto`                    | ✅     |
+| GET  | `/invoices/:id`               | internal        | —                           | `{invoice, order, relatedInvoices}` | ✅     |
+| POST | `/invoices/generate/:orderId` | FIN, ADMIN      | —                           | `InvoiceDto`                        | 🔨 D   |
+| POST | `/invoices/:id/payments`      | MGR, FIN, ADMIN | `RecordPaymentRequest`      | `InvoiceDto`                        | 🔨 D   |
+| GET  | `/invoices/:id/summary.csv`   | internal        | —                           | `text/csv`                          | 🔨 D   |
 
 `POST /subscriptions/:id/modify`
 
@@ -370,11 +490,20 @@ backorder to `CONSOLIDATION_AVAILABLE`, which is what raises screen 8's banner.
 ```
 
 ```json
-{ "success": true, "error": null, "data": {
-  "subscription": { "qty": 2, "amount": 8694, "…": "…" },
-  "proration": { "credit": 2174, "charge": 4348, "net": 2174,
-    "explanation": "15 of 30 days remain in the cycle (50.0%). Credit 2174 for the unused old plan, charge 4348 for the new plan, net 2174." },
-  "creditNote": null } }
+{
+  "success": true,
+  "error": null,
+  "data": {
+    "subscription": { "qty": 2, "amount": 8694, "…": "…" },
+    "proration": {
+      "credit": 2174,
+      "charge": 4348,
+      "net": 2174,
+      "explanation": "15 of 30 days remain in the cycle (50.0%). Credit 2174 for the unused old plan, charge 4348 for the new plan, net 2174."
+    },
+    "creditNote": null
+  }
+}
 ```
 
 A negative `net` produces a `CreditNoteDto` instead of a next-invoice line.
@@ -386,16 +515,28 @@ qtyInvoiced` on the non-subscription lines. Recurring lines are never on it.
 
 ## Deal health and reporting — Agent D · screens 14, 15
 
-| M | Path | Auth | Request | Response | Status |
-|---|---|---|---|---|---|
-| GET | `/deal-health` | internal | `?type=&status=` | `DealHealthDashboardDto` | ✅ |
-| POST | `/deal-health/evaluate` | MGR, ADMIN | — | `DealAlertDto[]` | 🔨 D |
-| POST | `/deal-health/:id/nudge` | MGR, ADMIN, REP | `{note?}` | `AlertActionResponse` | 🔨 D |
-| POST | `/deal-health/:id/escalate` | MGR, ADMIN | `{note?}` | `AlertActionResponse` | 🔨 D |
-| GET | `/reporting` | ADMIN, MGR, FIN | `ReportingQuery` | `ReportingDashboardDto` | ✅ |
-| GET | `/reporting/export.csv` | ADMIN, MGR, FIN | `ReportingQuery` | `text/csv` | 🔨 D |
-| GET | `/notifications` | any | `?read=` | `NotificationDto[]` | ✅ |
-| PATCH | `/notifications/:id/read` | any | — | `NotificationDto` | 🔨 C |
+| M     | Path                              | Auth            | Request                  | Response                          | Status |
+| ----- | --------------------------------- | --------------- | ------------------------ | --------------------------------- | ------ |
+| GET   | `/deal-health`                    | internal        | `?type=&status=`         | `DealHealthDashboardDto`          | ✅     |
+| POST  | `/deal-health/evaluate`           | MGR, ADMIN      | —                        | `DealAlertDto[]`                  | 🔨 D   |
+| POST  | `/deal-health/:id/nudge`          | MGR, ADMIN, REP | `{note?}`                | `AlertActionResponse`             | 🔨 D   |
+| POST  | `/deal-health/:id/escalate`       | MGR, ADMIN      | `{note?}`                | `AlertActionResponse`             | 🔨 D   |
+| GET   | `/reporting`                      | ADMIN, MGR, FIN | `ReportingQuery`         | `ReportingDashboardDto`           | ✅     |
+| GET   | `/reporting/export.csv`           | ADMIN, MGR, FIN | `ReportingQuery`         | `text/csv`                        | ✅     |
+| GET   | `/reporting/export.pdf` · `.xlsx` | ADMIN, MGR, FIN | `ReportingQuery`         | `application/pdf` · xlsx          | ✅     |
+| GET   | `/notifications`                  | any             | `?read=&page=&pageSize=` | `NotificationListDto` + page meta | ✅     |
+| GET   | `/notifications/:id`              | any             | —                        | `NotificationDto`                 | ✅     |
+| PATCH | `/notifications/:id/read`         | any             | —                        | `NotificationDto`                 | ✅     |
+| POST  | `/notifications/read-all`         | any             | —                        | `MarkAllReadResponse`             | ✅     |
+
+`GET /notifications` is always scoped to the signed-in user and returns
+`{ items, unreadCount }` in `data` with `{ page, pageSize, total, totalPages }` in
+`meta`. `POST /notifications/read-all` marks every unread notification for the
+caller read and returns `{ updated }`.
+
+`GET /reporting` (Phase E) also returns `avgApprovalSlaHours` (24) and
+`avgApprovalWithinSla` — the reporting dashboard highlights the average approval
+time against that target and the approval queue flags a pending item past it.
 
 `GET /reporting?period=month&repId=&approvalStatus=&category=` — the PDF's four
 filters. Every figure is aggregated from live documents:

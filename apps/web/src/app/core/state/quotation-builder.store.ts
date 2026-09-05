@@ -14,6 +14,7 @@ import {
   type ProductDto,
   type QuotationDto,
   type QuotationLineInput,
+  type ReissuePortalLinkResponse,
   type RiskConfig,
   type SubmitQuotationResponse,
   type UpdateQuotationRequest,
@@ -84,8 +85,12 @@ export class QuotationBuilderStore {
   readonly risk = computed(() =>
     calculateBlendedRisk(
       this.pricedLines().map((l) => ({
-        id: l.id, productName: l.productName, category: l.category,
-        qty: l.qty, unitPrice: l.unitPrice, discountPct: l.discountPct,
+        id: l.id,
+        productName: l.productName,
+        category: l.category,
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+        discountPct: l.discountPct,
         allowedDiscountPct: l.allowedDiscountPct,
       })),
       this.tier(),
@@ -94,11 +99,23 @@ export class QuotationBuilderStore {
   );
 
   readonly willAutoApprove = computed(() => isAutoApproved(this.risk()));
-  readonly overLines = computed(() => this.pricedLines().filter((l) => l.discountStatus === 'OVER'));
+  readonly overLines = computed(() =>
+    this.pricedLines().filter((l) => l.discountStatus === 'OVER'),
+  );
   readonly isDirty = signal(false);
 
+  /**
+   * Set when a save/submit came back `409 STALE_VERSION` — someone else changed
+   * this quotation while it was open here. Screen 4 shows a "reload the latest
+   * version" dialog; the local edits stay on screen behind it until the rep
+   * chooses. Cleared by `reloadFromServer()` or a successful save.
+   */
+  readonly staleConflict = signal(false);
+
   /** Only a DRAFT quotation accepts edits — the API enforces this too. */
-  readonly editable = computed(() => (this.quotation()?.stage ?? QuoteStage.DRAFT) === QuoteStage.DRAFT);
+  readonly editable = computed(
+    () => (this.quotation()?.stage ?? QuoteStage.DRAFT) === QuoteStage.DRAFT,
+  );
 
   /* ------------------------------------------------------------ loading */
 
@@ -109,7 +126,9 @@ export class QuotationBuilderStore {
       const [quotation, config, products] = await Promise.all([
         firstValueFrom(this.api.get<QuotationDto>(`/quotations/${quotationId}`)),
         firstValueFrom(this.api.get<ApprovalChainConfigDto>('/config')),
-        firstValueFrom(this.api.get<ProductDto[]>('/products', { status: 'ACTIVE', pageSize: 200 })),
+        firstValueFrom(
+          this.api.get<ProductDto[]>('/products', { status: 'ACTIVE', pageSize: 200 }),
+        ),
       ]);
       this.quotation.set(quotation);
       this.config.set(config);
@@ -128,7 +147,9 @@ export class QuotationBuilderStore {
   async loadSuggestions(quotationId: string): Promise<void> {
     try {
       this.suggestions.set(
-        await firstValueFrom(this.api.get<UpsellSuggestionDto[]>('/upsell/suggestions', { quotationId })),
+        await firstValueFrom(
+          this.api.get<UpsellSuggestionDto[]>('/upsell/suggestions', { quotationId }),
+        ),
       );
     } catch {
       // No suggestions for this quote (e.g. every product is already on it) — the panel shows its own empty hint.
@@ -139,13 +160,17 @@ export class QuotationBuilderStore {
   /* ------------------------------------------------------------ mutations */
 
   setQty(lineId: string, qty: number): void {
-    this.draftLines.update((lines) => lines.map((l) => (l.id === lineId ? { ...l, qty: Math.max(0, qty) } : l)));
+    this.draftLines.update((lines) =>
+      lines.map((l) => (l.id === lineId ? { ...l, qty: Math.max(0, qty) } : l)),
+    );
     this.isDirty.set(true);
   }
 
   setDiscount(lineId: string, discountPct: number): void {
     this.draftLines.update((lines) =>
-      lines.map((l) => (l.id === lineId ? { ...l, discountPct: Math.min(100, Math.max(0, discountPct)) } : l)),
+      lines.map((l) =>
+        l.id === lineId ? { ...l, discountPct: Math.min(100, Math.max(0, discountPct)) } : l,
+      ),
     );
     this.isDirty.set(true);
   }
@@ -221,10 +246,36 @@ export class QuotationBuilderStore {
       this.quotation.set(saved);
       this.draftLines.set(saved.lines.map(toInput));
       this.isDirty.set(false);
+      this.staleConflict.set(false);
       return true;
+    } catch (err: any) {
+      if (err?.error?.error?.code === 'STALE_VERSION') {
+        this.staleConflict.set(true);
+        return false;
+      }
+      throw err;
     } finally {
       this.saving.set(false);
     }
+  }
+
+  /** `POST /quotations/:id/portal-link` — revoke any live customer link and mint a fresh one. */
+  async reissuePortalLink(
+    quotationId: string,
+    reason?: string,
+  ): Promise<ReissuePortalLinkResponse> {
+    return firstValueFrom(
+      this.api.post<ReissuePortalLinkResponse>(`/quotations/${quotationId}/portal-link`, {
+        reason,
+      }),
+    );
+  }
+
+  /** Discard local edits and re-read the quotation the server actually has now. */
+  async reloadFromServer(): Promise<void> {
+    const q = this.quotation();
+    this.staleConflict.set(false);
+    if (q) await this.load(q.id);
   }
 
   /**
