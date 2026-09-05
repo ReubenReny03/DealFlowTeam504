@@ -53,6 +53,8 @@ export class SessionStore {
     const role = this.role();
     return !!role && role !== Role.CUSTOMER;
   });
+  /** Gates the header's Back-end shortcut. A convenience check, never a boundary — `roleGuard` is. */
+  readonly isAdmin = computed(() => this.role() === Role.ADMIN);
   readonly initials = computed(() => {
     const name = this.user()?.name ?? '';
     return name.split(/[\s.]+/).filter(Boolean).map((p) => p[0]).slice(0, 2).join('').toUpperCase();

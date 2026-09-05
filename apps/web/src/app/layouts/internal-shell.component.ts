@@ -8,6 +8,10 @@ import { NotificationBellComponent } from '../shared/ui/notification-bell.compon
  * The internal workspace shell. Top navigation is exactly the mockup's:
  * Dashboard · Quotations · Approvals · Fulfillment · Subscriptions · Invoices ·
  * Deal Health · Reports · Products — filtered to what the signed-in role may open.
+ *
+ * The "Back-end" shortcut beside the bell is Admin-only. Hiding it is a
+ * convenience, not a boundary: `roleGuard` on `/admin` is what actually refuses
+ * everyone else, and it still does whether or not the link is on screen.
  */
 @Component({
   selector: 'df-internal-shell',
@@ -42,11 +46,13 @@ import { NotificationBellComponent } from '../shared/ui/notification-bell.compon
           </nav>
 
           <div class="flex shrink-0 items-center gap-3">
-            <a
-              routerLink="/admin/config"
-              class="hidden text-sm text-slate-500 hover:text-slate-800 md:inline"
-              >Back-end</a
-            >
+            @if (session.isAdmin()) {
+              <a
+                routerLink="/admin/config"
+                class="hidden text-sm text-slate-500 hover:text-slate-800 md:inline"
+                >Back-end</a
+              >
+            }
             <df-notification-bell />
             <div class="flex items-center gap-2">
               <span

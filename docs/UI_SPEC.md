@@ -148,7 +148,9 @@ box and keep a paginator per table.
 **`InternalShellComponent`** — white sticky header, the mockup's nav in order:
 Dashboard · Quotations · Approvals · Fulfillment · Subscriptions · Invoices ·
 Deal Health · Reports · Products. Filtered by role from `INTERNAL_NAV`.
-Right side: a *Back-end* link, the user's initials and name, **Sign out**.
+Right side: a *Back-end* link (**Admin only**), the notification bell, the
+user's initials and name, **Sign out**. Hiding the link is a convenience, not a
+boundary — `roleGuard` on `/admin` is what refuses everyone else.
 
 **`AdminShellComponent`** — dark header, deliberately different so you always
 know you are in configuration. Nav: Products · Price Lists · Warehouses ·
