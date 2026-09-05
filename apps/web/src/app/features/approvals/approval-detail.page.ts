@@ -8,8 +8,16 @@ import {
   signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { CATEGORY_LABEL, ROLE_LABEL, type ReissuePortalLinkResponse } from '@dealflow/shared';
+import {
+  ApprovalStatus,
+  ApprovalStepStatus,
+  CATEGORY_LABEL,
+  ROLE_LABEL,
+  Role,
+  type ReissuePortalLinkResponse,
+} from '@dealflow/shared';
 import { ApprovalStore } from '../../core/state/feature.stores';
+import { SessionStore } from '../../core/state/session.store';
 import { ToastStore } from '../../core/state/toast.store';
 import {
   ConfirmDialogComponent,
@@ -199,6 +207,11 @@ import {
                 <p class="mt-3 text-xs leading-relaxed text-slate-400">
                   Every decision is recorded with your name, the time and your reason.
                 </p>
+              } @else if (waitingOnSomeoneElse()) {
+                <p class="df-muted mt-1">
+                  This step is waiting on {{ a.assignedToName ?? roleLabel(a.currentStage) }}. You
+                  will be able to act on it if it reaches your step.
+                </p>
               } @else {
                 <p class="df-muted mt-1">
                   This approval is {{ pretty(a.status) }}. There is nothing for you to do here.
@@ -267,6 +280,7 @@ import {
 })
 export class ApprovalDetailPage implements OnInit {
   protected readonly store = inject(ApprovalStore);
+  private readonly session = inject(SessionStore);
   private readonly toast = inject(ToastStore);
   readonly id = input<string>('');
 
@@ -294,7 +308,26 @@ export class ApprovalDetailPage implements OnInit {
       .replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
-  readonly canAct = computed(() => this.store.current()?.status === 'PENDING');
+  /**
+   * Mirrors the server's `assertActiveStepRole`: only the role holding the ACTIVE
+   * step may decide it, and an Admin may act on any step. A HIGH-risk quotation
+   * chains SALES_MANAGER then FINANCE, so without the role check the Manager was
+   * offered Approve/Return/Reject on a step that is sitting with Finance and only
+   * found out when the API answered 403.
+   */
+  readonly canAct = computed(() => {
+    const a = this.store.current();
+    if (!a || a.status !== ApprovalStatus.PENDING) return false;
+    const step = a.steps[a.currentStepIndex];
+    if (!step || step.status !== ApprovalStepStatus.ACTIVE) return false;
+    const role = this.session.role();
+    return role === Role.ADMIN || role === step.role;
+  });
+
+  /** PENDING, but on somebody else's desk — the aside explains rather than offers buttons. */
+  readonly waitingOnSomeoneElse = computed(
+    () => this.store.current()?.status === ApprovalStatus.PENDING && !this.canAct(),
+  );
 
   /** Submitted → each approver in the chain → Confirmed. */
   readonly steps = computed<Step[]>(() => {
