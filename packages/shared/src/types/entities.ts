@@ -159,6 +159,26 @@ export interface StockDto extends Timestamped {
   incomingEta?: IsoDate;
 }
 
+/**
+ * One warehouse's holding of a single product, as screen 17's Warehouse Stock
+ * card renders it. A warehouse with no `Stock` row yet is still returned, with
+ * zeroes — "we hold none here" and "we have never stocked it here" look the
+ * same to a buyer, and the row is where an opening allocation gets typed.
+ */
+export interface ProductWarehouseStockDto {
+  warehouseId: Id;
+  warehouseCode: string;
+  warehouseName: string;
+  /** False for a decommissioned warehouse that still holds stock. */
+  warehouseActive: boolean;
+  inStock: number;
+  reserved: number;
+  /** Always `inStock - reserved`. */
+  available: number;
+  /** Set when a replenishment is inbound; feeds the backorder ETA. */
+  incomingEta?: IsoDate;
+}
+
 /* ------------------------------------------------------------------ configuration */
 
 export interface RiskThresholdsDto {

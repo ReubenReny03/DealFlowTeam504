@@ -8,15 +8,23 @@ import {
   CYCLE_LABEL,
   ProductCategory,
   ProductStatus,
+  isStockedCategory,
   money,
   toMajor,
   type PriceListDto,
   type ProductDto,
+  type ProductStockDto,
   type UpsertProductRequest,
 } from '@dealflow/shared';
 import { ApiService } from '../../core/api/api.service';
 import { ToastStore } from '../../core/state/toast.store';
-import { ErrorStateComponent, LoadingComponent, MoneyPipe, StatusChipComponent } from '../../shared/ui';
+import {
+  ErrorStateComponent,
+  LoadingComponent,
+  LongDatePipe,
+  MoneyPipe,
+  StatusChipComponent,
+} from '../../shared/ui';
 
 interface VariantDraft {
   attribute: string;
@@ -30,7 +38,7 @@ interface VariantDraft {
 @Component({
   selector: 'df-product-detail',
   standalone: true,
-  imports: [RouterLink, FormsModule, MoneyPipe, StatusChipComponent, LoadingComponent, ErrorStateComponent],
+  imports: [RouterLink, FormsModule, MoneyPipe, LongDatePipe, StatusChipComponent, LoadingComponent, ErrorStateComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (loading()) {
@@ -100,7 +108,17 @@ interface VariantDraft {
                 <label class="block">
                   <span class="df-label">Quantity on hand</span>
                   <input class="df-input" type="number" min="0" [(ngModel)]="form.quantityOnHand" />
-                  <span class="mt-1 block text-xs text-slate-400">Catalogue-level. Per-warehouse stock is the authoritative figure.</span>
+                  @if (stockedCategory(form.category)) {
+                    <span class="mt-1 block text-xs text-slate-400">
+                      Catalogue-level. Per-warehouse stock is the authoritative figure — restock a
+                      warehouse rather than editing this number.
+                    </span>
+                  } @else {
+                    <span class="mt-1 block text-xs text-slate-400">
+                      Catalogue-level. A {{ label(form.category).toLowerCase() }} product is not held
+                      in a warehouse.
+                    </span>
+                  }
                 </label>
                 <label class="block">
                   <span class="df-label">Status</span>
@@ -216,7 +234,87 @@ interface VariantDraft {
           </div>
         </section>
 
-        <aside>
+        <aside class="space-y-6">
+          @if (stock(); as st) {
+            @if (st.stocked) {
+              <div class="df-card p-5">
+                <h2 class="df-h2">Warehouse Stock</h2>
+                <p class="df-muted mt-1">
+                  Where this hardware physically sits. <em>Available</em> is what a quotation can
+                  reserve; reserved units are already promised to an order.
+                </p>
+
+                @if (st.warehouses.length) {
+                  <div class="df-scroll-x mt-3">
+                    <table class="min-w-full divide-y divide-slate-200">
+                      <thead>
+                        <tr>
+                          <th class="df-th">Warehouse</th>
+                          <th class="df-th text-right">In stock</th>
+                          <th class="df-th text-right">Reserved</th>
+                          <th class="df-th text-right">Available</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-slate-100">
+                        @for (w of st.warehouses; track w.warehouseId) {
+                          <tr>
+                            <td class="df-td">
+                              <span class="font-medium text-slate-800">{{ w.warehouseName }}</span>
+                              <span class="font-mono text-xs text-slate-400"> {{ w.warehouseCode }}</span>
+                              @if (!w.warehouseActive) {
+                                <span class="df-chip ml-1 border-slate-200 bg-slate-100 text-slate-500">inactive</span>
+                              }
+                              @if (w.incomingEta) {
+                                <span class="mt-0.5 block text-xs text-sky-700">
+                                  Replenishment due {{ w.incomingEta | longDate }}
+                                </span>
+                              }
+                            </td>
+                            <td class="df-td text-right font-mono">{{ w.inStock }}</td>
+                            <td class="df-td text-right font-mono text-slate-500">{{ w.reserved }}</td>
+                            <td
+                              class="df-td text-right font-mono font-semibold"
+                              [class]="w.available > 0 ? 'text-emerald-700' : 'text-rose-700'"
+                            >
+                              {{ w.available }}
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                      <tfoot class="border-t border-slate-200 bg-slate-50">
+                        <tr>
+                          <td class="df-td font-medium text-slate-700">All warehouses</td>
+                          <td class="df-td text-right font-mono font-semibold">{{ st.totalInStock }}</td>
+                          <td class="df-td text-right font-mono text-slate-500">{{ st.totalReserved }}</td>
+                          <td class="df-td text-right font-mono font-semibold">{{ st.totalAvailable }}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  @if (st.totalInStock !== st.quantityOnHand) {
+                    <p class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+                      The catalogue says {{ st.quantityOnHand }} on hand but the warehouses hold
+                      {{ st.totalInStock }}. The warehouse figure is the one the split planner uses.
+                    </p>
+                  }
+                } @else {
+                  <p class="mt-3 text-sm text-slate-500">
+                    There are no active warehouses to stock this product in yet.
+                  </p>
+                }
+
+                <p class="mt-3 text-xs leading-relaxed text-slate-400">
+                  Quantities move through a restock or a write-down, so every change carries a
+                  reason into the audit trail.
+                </p>
+                <a routerLink="/admin/warehouses" class="mt-3 inline-block text-sm font-medium text-brand-700 hover:text-brand-800">
+                  Manage warehouses →
+                </a>
+              </div>
+            }
+          }
+
           <div class="df-card p-5">
             <h2 class="df-h2">Pricelists</h2>
             <div class="df-scroll-x mt-3">
@@ -256,6 +354,8 @@ export class ProductDetailPage implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly product = signal<ProductDto | null>(null);
   protected readonly priceLists = signal<PriceListDto[]>([]);
+  /** Null until loaded; `stocked: false` for a category that never sits in a warehouse. */
+  protected readonly stock = signal<ProductStockDto | null>(null);
 
   protected readonly editing = signal(false);
   protected readonly saving = signal(false);
@@ -280,12 +380,17 @@ export class ProductDetailPage implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const [product, priceLists] = await Promise.all([
+      // The stock call answers for every category — `stocked: false` for the ones
+      // that are delivered rather than shipped — so it costs one round trip, not a
+      // branch on a product we have not loaded yet.
+      const [product, priceLists, stock] = await Promise.all([
         firstValueFrom(this.api.get<ProductDto>(`/products/${this.id()}`)),
         firstValueFrom(this.api.get<PriceListDto[]>('/pricelists')),
+        firstValueFrom(this.api.get<ProductStockDto>(`/products/${this.id()}/stock`)),
       ]);
       this.product.set(product);
       this.priceLists.set(priceLists ?? []);
+      this.stock.set(stock);
     } catch (err: any) {
       this.error.set(err?.error?.error?.message ?? 'Could not load this product.');
     } finally {
@@ -333,12 +438,26 @@ export class ProductDetailPage implements OnInit {
     this.variants.update((list) => list.filter((_, i) => i !== index));
   }
 
+  private async reloadStock(): Promise<void> {
+    try {
+      this.stock.set(await firstValueFrom(this.api.get<ProductStockDto>(`/products/${this.id()}/stock`)));
+    } catch {
+      /* the interceptor has already toasted the reason; the card just stays as it was */
+    }
+  }
+
+  /** Whether the category currently being edited will show the Warehouse Stock card. */
+  protected stockedCategory(category: ProductCategory): boolean {
+    return isStockedCategory(category);
+  }
+
   /** The note belongs under whichever view is showing a subscription product. */
   showsRecurringNote(): boolean {
     return this.editing() ? this.form.isSubscription : !!this.product()?.isSubscription;
   }
 
   async save(): Promise<void> {
+    const previousCategory = this.product()?.category;
     const body: UpsertProductRequest = {
       name: this.form.name.trim(),
       sku: this.form.sku.trim(),
@@ -358,9 +477,13 @@ export class ProductDetailPage implements OnInit {
     this.saving.set(true);
     try {
       const saved = await firstValueFrom(this.api.put<ProductDto>(`/products/${this.id()}`, body));
+      const categoryChanged = saved.category !== previousCategory;
       this.product.set(saved);
       this.editing.set(false);
       this.variants.set([]);
+      // Editing a product into (or out of) a stocked category changes whether the
+      // Warehouse Stock card belongs on the page at all.
+      if (categoryChanged) await this.reloadStock();
       this.toast.success('Product saved', `${saved.name} is up to date.`);
     } catch {
       /* the interceptor has already toasted the reason */

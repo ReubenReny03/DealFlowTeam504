@@ -3,8 +3,8 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import {
-  BillingCycle, CATEGORY_LABEL, CYCLE_LABEL, EMPTY_STATES, ProductCategory, money,
-  type ProductDashboardDto, type ProductDto, type UpsertProductRequest,
+  BillingCycle, CATEGORY_LABEL, CYCLE_LABEL, EMPTY_STATES, ProductCategory, isStockedCategory, money,
+  type ProductDashboardDto, type ProductDto, type UpsertProductRequest, type WarehouseDto,
 } from '@dealflow/shared';
 import { ApiService } from '../../core/api/api.service';
 import { ListQuery } from '../../core/state/list-query';
@@ -135,10 +135,12 @@ import {
           <span class="df-label">Tax %</span>
           <input class="df-input" type="number" min="0" max="100" [(ngModel)]="draft.taxPct" />
         </label>
-        <label class="block">
-          <span class="df-label">Quantity on hand</span>
-          <input class="df-input" type="number" min="0" [(ngModel)]="draft.quantityOnHand" />
-        </label>
+        @if (!stocked()) {
+          <label class="block">
+            <span class="df-label">Quantity on hand</span>
+            <input class="df-input" type="number" min="0" [(ngModel)]="draft.quantityOnHand" />
+          </label>
+        }
         <label class="block sm:col-span-2">
           <span class="df-label">Description</span>
           <textarea class="df-input min-h-[4rem]" [(ngModel)]="draft.description"></textarea>
@@ -157,6 +159,47 @@ import {
               A recurring order with this product is invoiced at the beginning of the period.
             </span>
           </label>
+        }
+
+        <!-- Hardware sits in a warehouse, so it is stocked where it is created. -->
+        @if (stocked()) {
+          <div class="sm:col-span-2">
+            <span class="df-label">Opening stock by warehouse</span>
+            @if (warehouses().length) {
+              <div class="mt-1 divide-y divide-slate-100 rounded-lg border border-slate-200">
+                @for (w of warehouses(); track w.id) {
+                  <label class="flex items-center justify-between gap-3 px-3 py-2">
+                    <span class="text-sm text-slate-700">
+                      {{ w.name }}
+                      <span class="font-mono text-xs text-slate-400">{{ w.code }}</span>
+                    </span>
+                    <input
+                      class="df-input !w-28 text-right"
+                      type="number"
+                      min="0"
+                      [ngModel]="allocation(w.id)"
+                      (ngModelChange)="setAllocation(w.id, $event)"
+                      [attr.aria-label]="'Opening stock at ' + w.name"
+                    />
+                  </label>
+                }
+                <div class="flex items-center justify-between gap-3 bg-slate-50 px-3 py-2">
+                  <span class="text-sm font-medium text-slate-700">Quantity on hand</span>
+                  <span class="w-28 pr-3 text-right font-mono text-sm font-semibold text-slate-900">
+                    {{ openingStock() }}
+                  </span>
+                </div>
+              </div>
+              <span class="mt-1 block text-xs text-slate-400">
+                The catalogue quantity is the sum of these, so the two can never disagree. Leave
+                them at zero and restock later from the warehouse screen.
+              </span>
+            } @else {
+              <p class="mt-1 text-sm text-slate-500">
+                There are no active warehouses yet. The product will be created with no stock.
+              </p>
+            }
+          </div>
         }
       </div>
       <div class="mt-5 flex justify-end gap-2">
@@ -186,6 +229,10 @@ export class ProductListPage implements OnInit {
 
   protected readonly createOpen = signal(false);
   protected readonly saving = signal(false);
+  /** Active warehouses, offered as opening-stock rows when the draft is a stocked category. */
+  protected readonly warehouses = signal<WarehouseDto[]>([]);
+  /** warehouseId -> opening units. Reset with the draft. */
+  protected readonly allocations = signal<Record<string, number>>({});
   draft = emptyDraft();
 
   ngOnInit(): void { void this.load(); }
@@ -226,9 +273,40 @@ export class ProductListPage implements OnInit {
   open(p: ProductDto): void { void this.router.navigate(['/admin/products', p.id]); }
   managePriceFields(): void { void this.router.navigate(['/admin/pricelists']); }
 
+  /** True while the draft's category is one that sits in a warehouse. */
+  stocked(): boolean {
+    return isStockedCategory(this.draft.category);
+  }
+  allocation(warehouseId: string): number {
+    return this.allocations()[warehouseId] ?? 0;
+  }
+  setAllocation(warehouseId: string, value: number | string): void {
+    const units = Math.max(0, Math.trunc(Number(value) || 0));
+    this.allocations.update((current) => ({ ...current, [warehouseId]: units }));
+  }
+  /** What `quantityOnHand` will be — the sum of the warehouse rows, shown live. */
+  openingStock(): number {
+    return this.warehouses().reduce((n, w) => n + this.allocation(w.id), 0);
+  }
+
   newProduct(): void {
     this.draft = emptyDraft();
+    this.allocations.set({});
     this.createOpen.set(true);
+    // Only the create form needs these, so they are fetched when it opens rather
+    // than on every visit to the catalogue.
+    if (!this.warehouses().length) void this.loadWarehouses();
+  }
+
+  private async loadWarehouses(): Promise<void> {
+    try {
+      const list = await firstValueFrom(this.api.get<WarehouseDto[]>('/warehouses'));
+      this.warehouses.set((list ?? []).filter((w) => w.active));
+    } catch {
+      // A missing warehouse list must not block creating a product; the form
+      // falls back to "no active warehouses yet" and stock is added later.
+      this.warehouses.set([]);
+    }
   }
 
   /** Money leaves this form as an integer count of cents — never a float. */
@@ -244,6 +322,16 @@ export class ProductListPage implements OnInit {
       isSubscription: this.draft.isSubscription,
       recurringCycle: this.draft.isSubscription ? this.draft.recurringCycle : undefined,
       quantityOnHand: Number(this.draft.quantityOnHand) || 0,
+      // Only a stocked category may carry these, and the API sets quantityOnHand
+      // from their sum, so the field above is ignored for hardware.
+      ...(this.stocked()
+        ? {
+            warehouseStock: this.warehouses().map((w) => ({
+              warehouseId: w.id,
+              inStock: this.allocation(w.id),
+            })),
+          }
+        : {}),
     };
     this.saving.set(true);
     try {

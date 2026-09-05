@@ -6,14 +6,17 @@ import {
   ProductCategory,
   ProductStatus,
   Role,
+  isStockedCategory,
   type ProductDashboardDto,
   type ProductDto,
+  type ProductStockDto,
+  type ProductWarehouseStockDto,
 } from '@dealflow/shared';
-import { PriceList, Product } from '../../db/models.js';
+import { PriceList, Product, Stock, Warehouse } from '../../db/models.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { conflict, notFound } from '../../utils/apiError.js';
+import { badRequest, conflict, notFound } from '../../utils/apiError.js';
 import { listParams, pageMeta, searchFilter, stableSort } from '../../utils/listQuery.js';
 import { created, ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
@@ -25,7 +28,7 @@ export const productsRouter = Router();
 
 mountModuleHealth(productsRouter, {
   module: 'products', owner: 'A', screens: [16, 17],
-  implemented: ['GET /', 'GET /:id', 'GET /dashboard', 'POST /', 'PUT /:id'],
+  implemented: ['GET /', 'GET /:id', 'GET /:id/stock', 'GET /dashboard', 'POST /', 'PUT /:id'],
   todo: [],
 });
 
@@ -75,6 +78,65 @@ productsRouter.get(
   }),
 );
 
+/**
+ * Screen 17's Warehouse Stock card.
+ *
+ * Only a stocked category holds warehouse stock, so SERVICES and SUBSCRIPTION
+ * answer with `stocked: false` and an empty list rather than a 404 — the caller
+ * asks the same question for every product and lets the answer decide.
+ *
+ * Every ACTIVE warehouse is returned even when it has no `Stock` row, so a new
+ * hardware product reads as "Main 0 / East 0" instead of an empty table. An
+ * INACTIVE warehouse appears only while it still holds something, because stock
+ * stranded in a decommissioned depot is exactly what an admin needs to see.
+ */
+productsRouter.get(
+  '/:id/stock',
+  requireAuth(),
+  asyncHandler(async (req, res) => {
+    const product: any = await Product.findById(req.params.id).lean();
+    if (!product) throw notFound(`No product with id ${req.params.id}`);
+
+    const stocked = isStockedCategory(product.category);
+    const [warehouses, rows] = await Promise.all([
+      stocked ? Warehouse.find().sort({ name: 1 }).lean() : Promise.resolve([]),
+      stocked ? Stock.find({ productId: product._id }).lean() : Promise.resolve([]),
+    ]);
+    const byWarehouse = new Map((rows as any[]).map((r) => [String(r.warehouseId), r]));
+
+    const list: ProductWarehouseStockDto[] = (warehouses as any[])
+      .filter((w) => w.active !== false || (byWarehouse.get(String(w._id))?.inStock ?? 0) > 0)
+      .map((w) => {
+        const row = byWarehouse.get(String(w._id));
+        const inStock = row?.inStock ?? 0;
+        const reserved = row?.reserved ?? 0;
+        return {
+          warehouseId: String(w._id),
+          warehouseCode: w.code,
+          warehouseName: w.name,
+          warehouseActive: w.active !== false,
+          inStock,
+          reserved,
+          available: Math.max(0, inStock - reserved),
+          incomingEta: row?.incomingEta ? new Date(row.incomingEta).toISOString() : undefined,
+        };
+      });
+
+    const payload: ProductStockDto = {
+      productId: String(product._id),
+      productName: product.name,
+      category: product.category,
+      stocked,
+      warehouses: list,
+      totalInStock: list.reduce((n, w) => n + w.inStock, 0),
+      totalReserved: list.reduce((n, w) => n + w.reserved, 0),
+      totalAvailable: list.reduce((n, w) => n + w.available, 0),
+      quantityOnHand: product.quantityOnHand ?? 0,
+    };
+    ok(res, payload);
+  }),
+);
+
 /* ------------------------------------------------------------------ writes */
 
 const variantSchema = z.object({
@@ -106,6 +168,14 @@ const productSchema = z.object({
   promoTag: z.string().trim().optional(),
   variants: z.array(variantSchema).default([]),
   status: z.nativeEnum(ProductStatus).default(ProductStatus.ACTIVE),
+  warehouseStock: z
+    .array(
+      z.object({
+        warehouseId: z.string().min(1),
+        inStock: z.number().int().min(0),
+      }),
+    )
+    .optional(),
 });
 
 /**
@@ -120,6 +190,24 @@ const withCycleRule = <T extends z.ZodTypeAny>(schema: T) =>
         path: ['recurringCycle'],
         message: 'A subscription product must say how often it recurs.',
       });
+    }
+    // Opening stock only means something for a category that sits in a warehouse.
+    if (value.warehouseStock?.length) {
+      if (value.category !== undefined && !isStockedCategory(value.category)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['warehouseStock'],
+          message: `A ${String(value.category).toLowerCase()} product is not stocked in a warehouse.`,
+        });
+      }
+      const ids = value.warehouseStock.map((w: any) => String(w.warehouseId));
+      if (new Set(ids).size !== ids.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['warehouseStock'],
+          message: 'Each warehouse may only be allocated once.',
+        });
+      }
     }
   });
 
@@ -151,12 +239,47 @@ productsRouter.post(
 
     if (await Product.exists({ sku })) throw conflict(`SKU ${sku} is already used by another product.`);
 
+    // A hardware product is created WITH its opening stock: the warehouses are
+    // resolved before the product is written, so a typo in a warehouse id fails
+    // the whole request instead of leaving a stockless product behind.
+    const allocations = (body.warehouseStock ?? []).filter((a) => a.inStock > 0);
+    if (allocations.length) {
+      const found = await Warehouse.find({ _id: { $in: allocations.map((a) => a.warehouseId) } })
+        .select('name active')
+        .lean();
+      const byId = new Map((found as any[]).map((w) => [String(w._id), w]));
+      for (const a of allocations) {
+        const warehouse = byId.get(String(a.warehouseId));
+        if (!warehouse) throw notFound(`No warehouse with id ${a.warehouseId}`);
+        if (warehouse.active === false) {
+          throw conflict(`${warehouse.name} is not active and cannot take opening stock.`);
+        }
+      }
+    }
+
+    const openingStock = allocations.reduce((n, a) => n + a.inStock, 0);
+    const { warehouseStock: _ignored, ...productFields } = body;
     const doc = await Product.create({
-      ...body,
+      ...productFields,
       sku,
       // A non-subscription product must not carry a stale cycle.
       recurringCycle: body.isSubscription ? body.recurringCycle : undefined,
+      // The catalogue figure is the sum of the warehouses whenever they were given,
+      // so the two numbers cannot disagree the moment the product exists.
+      quantityOnHand: body.warehouseStock ? openingStock : body.quantityOnHand,
     });
+
+    if (allocations.length) {
+      await Stock.insertMany(
+        allocations.map((a) => ({
+          warehouseId: a.warehouseId,
+          productId: doc._id,
+          inStock: a.inStock,
+          reserved: 0,
+          available: a.inStock,
+        })),
+      );
+    }
 
     await writeAudit({
       actor: { id: req.user!.id, name: req.user!.name, role: req.user!.role },
@@ -164,7 +287,12 @@ productsRouter.post(
       entity: AuditEntity.PRODUCT,
       entityId: String(doc._id),
       entityLabel: `${doc.name} (${doc.sku})`,
-      after: { name: doc.name, category: doc.category, unitPrice: doc.unitPrice, costPrice: doc.costPrice },
+      after: {
+        name: doc.name, category: doc.category, unitPrice: doc.unitPrice, costPrice: doc.costPrice,
+        ...(allocations.length
+          ? { openingStock, warehouses: allocations.length }
+          : {}),
+      },
       reason: 'Catalogue addition',
     });
 
@@ -183,6 +311,11 @@ productsRouter.put(
     const body = req.body as Partial<z.infer<typeof productSchema>>;
     if (body.sku && body.sku !== doc.sku && (await Product.exists({ sku: body.sku }))) {
       throw conflict(`SKU ${body.sku} is already used by another product.`);
+    }
+    // Opening stock is a create-time fact. Every later movement goes through
+    // POST /stock/adjust, which is the one path that audits a quantity change.
+    if (body.warehouseStock) {
+      throw badRequest('Stock is adjusted through POST /stock/adjust, not by editing the product.');
     }
 
     const before = toDto<ProductDto>(doc);

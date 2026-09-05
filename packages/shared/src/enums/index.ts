@@ -95,6 +95,16 @@ export const ProductCategory = {
   SUBSCRIPTION: 'SUBSCRIPTION',
 } as const;
 export type ProductCategory = (typeof ProductCategory)[keyof typeof ProductCategory];
+/**
+ * The categories that physically sit in a warehouse. Services are performed and
+ * subscriptions are billed — neither is ever picked off a shelf — so only
+ * HARDWARE carries per-warehouse stock, is asked for opening stock at creation
+ * time, and shows the Warehouse Stock card on screen 17.
+ */
+export const STOCKED_CATEGORIES: ProductCategory[] = [ProductCategory.HARDWARE];
+/** True when a product in this category holds stock in warehouses. */
+export const isStockedCategory = (category: ProductCategory): boolean =>
+  STOCKED_CATEGORIES.includes(category);
 
 export const CustomerTier = {
   BRONZE: 'BRONZE',

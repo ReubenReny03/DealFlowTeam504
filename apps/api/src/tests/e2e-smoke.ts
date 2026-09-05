@@ -812,6 +812,100 @@ async function main(): Promise<void> {
     return `${lists.length + 1} list endpoints page + report meta · search narrows total · regex is literal · portal search stays in-company`;
   });
 
+  /* ---- 17. Hardware carries warehouse stock; nothing else does ---- */
+  await step(
+    17,
+    'A hardware product shows and is created with its warehouse stock',
+    'A',
+    async () => {
+      const admin = tokens[Role.ADMIN];
+      const catalogue = await api('GET', '/products?pageSize=100', { token: admin });
+      assert(catalogue.status === 200, 'could not read the catalogue');
+      const laptop = catalogue.body.data.find((p: any) => p.sku === 'LP14-BASE');
+      const service = catalogue.body.data.find((p: any) => p.sku === 'SVC-ONSITE');
+      assert(laptop && service, 'the seeded laptop and service product must both exist');
+
+      // Read side: the laptop reports the same Main 18 / East 6 the split
+      // planner works from, and the catalogue figure reconciles to the sum.
+      const stock = await api('GET', `/products/${laptop.id}/stock`, { token: admin });
+      expectBuilt(stock, 'A', 'GET /products/:id/stock');
+      assert(stock.status === 200, `product stock failed: ${stock.body.error?.message}`);
+      assert(stock.body.data.stocked === true, 'a hardware product must be stocked');
+      const main = stock.body.data.warehouses.find((w: any) => w.warehouseCode === 'MAIN');
+      const east = stock.body.data.warehouses.find((w: any) => w.warehouseCode === 'EAST');
+      assert(main?.available === 18, `Main should show 18 available, got ${main?.available}`);
+      assert(east?.available === 6, `East should show 6 available, got ${east?.available}`);
+      assert(
+        stock.body.data.totalInStock === stock.body.data.quantityOnHand,
+        `catalogue quantity ${stock.body.data.quantityOnHand} must equal the warehouses' ${stock.body.data.totalInStock}`,
+      );
+
+      // A service is delivered, never shelved, so it answers plainly instead of 404ing.
+      const serviceStock = await api('GET', `/products/${service.id}/stock`, { token: admin });
+      assert(
+        serviceStock.status === 200 &&
+          serviceStock.body.data.stocked === false &&
+          serviceStock.body.data.warehouses.length === 0,
+        'a services product must report stocked: false with no warehouses',
+      );
+
+      // Write side: opening stock lands as real Stock rows and sets the catalogue figure.
+      const warehouses = await api('GET', '/warehouses', { token: admin });
+      const [wMain, wEast] = ['MAIN', 'EAST'].map((code) =>
+        warehouses.body.data.find((w: any) => w.code === code),
+      );
+      const createdProduct = await api('POST', '/products', {
+        token: admin,
+        body: {
+          name: 'Smoke Test Monitor',
+          category: 'HARDWARE',
+          unitPrice: 20000,
+          costPrice: 12000,
+          unit: 'Each',
+          taxPct: 15,
+          isSubscription: false,
+          warehouseStock: [
+            { warehouseId: wMain.id, inStock: 7 },
+            { warehouseId: wEast.id, inStock: 3 },
+          ],
+        },
+      });
+      assert(createdProduct.status === 201, `create failed: ${createdProduct.body.error?.message}`);
+      assert(
+        createdProduct.body.data.quantityOnHand === 10,
+        `opening stock must set quantityOnHand to 10, got ${createdProduct.body.data.quantityOnHand}`,
+      );
+      const newStock = await api('GET', `/products/${createdProduct.body.data.id}/stock`, {
+        token: admin,
+      });
+      assert(
+        newStock.body.data.totalInStock === 10 && newStock.body.data.totalAvailable === 10,
+        'the opening allocation must be readable back as warehouse stock',
+      );
+
+      // And a category that is never stocked cannot smuggle stock in.
+      const rejected = await api('POST', '/products', {
+        token: admin,
+        body: {
+          name: 'Smoke Test Service',
+          category: 'SERVICES',
+          unitPrice: 5000,
+          costPrice: 1000,
+          unit: 'Each',
+          taxPct: 15,
+          isSubscription: false,
+          warehouseStock: [{ warehouseId: wMain.id, inStock: 4 }],
+        },
+      });
+      assert(
+        rejected.status === 400,
+        `a services product must not accept warehouse stock, got ${rejected.status}`,
+      );
+
+      return 'Laptop Main 18 / East 6 reconciles to the catalogue; a new hardware product opened with 7 + 3; services rejected';
+    },
+  );
+
   /* ------------------------------------------------------------------ report */
 
   server.close();

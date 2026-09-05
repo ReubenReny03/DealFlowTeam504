@@ -27,6 +27,8 @@ export async function seedWarehousesAndStock(_ctx: SeedContext): Promise<void> {
     },
   ]);
 
+  // The sum of a product's rows here is its catalogue `quantityOnHand` in
+  // products.seed.ts — screen 17 reconciles the two, so they must agree.
   const rows = [
     // warehouse,           product,                     inStock, reserved
     [IDS.warehouses.main, IDS.products.laptop,   40, 22],

@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
-import { ApprovalStatus, InvoiceStatus, RiskLevel, Role } from '@dealflow/shared';
+import { ApprovalStatus, InvoiceStatus, RiskLevel, Role, isStockedCategory } from '@dealflow/shared';
 import { env, isLocalMongoUri } from '../apps/api/src/config/env.js';
 import { connectMongo, disconnectMongo } from '../apps/api/src/db/connection.js';
 import {
@@ -28,6 +28,7 @@ import {
   Invoice,
   Order,
   PortalToken,
+  Product,
   Quotation,
   Stock,
   User,
@@ -240,6 +241,28 @@ const ASSERTIONS: Assertion[] = [
       for (const r of rows) {
         eq(r.available, Math.max(0, r.inStock - r.reserved), `stock invariant for ${r._id}`);
         expect(r.reserved >= 0 && r.inStock >= 0, 'stock quantities must not be negative');
+      }
+    },
+  },
+  {
+    name: 'a stocked product\'s catalogue quantity equals what its warehouses hold',
+    run: async () => {
+      const [products, rows] = await Promise.all([
+        Product.find().select('name sku category quantityOnHand').lean(),
+        Stock.find().select('productId inStock').lean(),
+      ]);
+      const held = new Map<string, number>();
+      for (const r of rows as any[]) {
+        held.set(String(r.productId), (held.get(String(r.productId)) ?? 0) + r.inStock);
+      }
+      for (const p of products as any[]) {
+        if (!isStockedCategory(p.category)) {
+          eq(p.quantityOnHand, 0, `${p.sku} is not stocked and must show 0 on hand`);
+          continue;
+        }
+        // Screen 17 reconciles these two figures and flags a drift, so the seed
+        // must not ship one. A hardware product with no stock rows yet is fine.
+        eq(p.quantityOnHand, held.get(String(p._id)) ?? 0, `${p.sku} catalogue quantity`);
       }
     },
   },

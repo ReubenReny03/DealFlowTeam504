@@ -112,7 +112,7 @@ Indexes: `{name} unique` · `{ownerId, tier}`
 | `taxPct` | number | |
 | `isSubscription` | boolean | true → this line generates a Subscription, not an invoice line |
 | `recurringCycle` | enum | only when `isSubscription` |
-| `quantityOnHand` | number | catalogue-level; the authoritative figure is per-warehouse `Stock` |
+| `quantityOnHand` | number | catalogue-level; the authoritative figure is per-warehouse `Stock`. For a HARDWARE product it is kept equal to the sum of its `Stock` rows (set from the opening allocation at creation, asserted by `npm run reset:check`); screen 17 flags a drift |
 | `status` | enum | ACTIVE · ARCHIVED |
 | `promoted` · `promoTag` | boolean · string | ranks higher in the upsell panel |
 | `variants` | `[{attribute, values: [{value, extraPrice}]}]` | screen 17's grid |

@@ -218,6 +218,7 @@ Errors: `400` if `reason` is missing · `404` if governance has never been saved
 | GET        | `/products`                       | any   | `ProductDto[]`          | ✅     |
 | GET        | `/products/:id`                   | any   | `ProductDto`            | ✅     |
 | GET        | `/products/dashboard`             | any   | `ProductDashboardDto`   | ✅     |
+| GET        | `/products/:id/stock`             | any   | `ProductStockDto`       | ✅     |
 | POST       | `/products`                       | ADMIN | `ProductDto`            | ✅     |
 | PUT        | `/products/:id`                   | ADMIN | `ProductDto`            | ✅     |
 | GET        | `/pricelists` · `/pricelists/:id` | any   | `PriceListDto`          | ✅     |
@@ -230,6 +231,20 @@ Errors: `400` if `reason` is missing · `404` if governance has never been saved
 | GET        | `/users?role=`                    | ADMIN | `UserDto[]`             | ✅     |
 
 Filters: `/products?category=&status=&q=` · `/customers?tier=&ownerId=&q=`
+
+`GET /products/:id/stock` answers for **every** product, so screen 17 can ask
+without branching first: a category that is never shelved (SERVICES,
+SUBSCRIPTION) comes back `stocked: false` with an empty `warehouses` list rather
+than a 404. For HARDWARE it lists every ACTIVE warehouse — including those with
+no `Stock` row, at zero — plus any inactive warehouse still holding units.
+
+`POST /products` takes an optional `warehouseStock: [{warehouseId, inStock}]`,
+which is how a hardware product is created **with** its opening stock. It is
+rejected (400) for a category that is not stocked, and rejected on `PUT` too:
+every later movement goes through `POST /stock/adjust`, the one path that writes
+a reason into the audit trail. When allocations are supplied the product's
+`quantityOnHand` is set to their sum, so the catalogue figure and the warehouses
+cannot disagree on day one.
 
 ---
 

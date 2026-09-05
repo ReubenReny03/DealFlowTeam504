@@ -1,4 +1,12 @@
-/** The catalogue from screens 16 and 17, plus the co-purchase pairings the upsell panel ranks on. */
+/**
+ * The catalogue from screens 16 and 17, plus the co-purchase pairings the upsell
+ * panel ranks on.
+ *
+ * For a HARDWARE product, `quantityOnHand` is the sum of what the warehouses
+ * hold in `warehouses.seed.ts` — screen 17's Warehouse Stock card reconciles the
+ * two and says so when they drift, so seeded data must not start out drifted.
+ * SERVICES and SUBSCRIPTION products are never stocked and stay at 0.
+ */
 import { BillingCycle, ProductCategory, ProductStatus, money } from '@dealflow/shared';
 import { Product, ProductPairing } from '../../db/models.js';
 import { IDS } from '../ids.js';
@@ -40,14 +48,16 @@ export async function seedProducts(_ctx: SeedContext): Promise<void> {
       category: ProductCategory.HARDWARE,
       description: 'Two extra years of hardware cover.',
       unitPrice: money(180), costPrice: money(96), unit: 'Each', taxPct: 15,
-      isSubscription: false, quantityOnHand: 999, status: ProductStatus.ACTIVE, promoted: false, variants: [],
+      // 999 at Main + 999 at East. See the note above on why this is the sum.
+      isSubscription: false, quantityOnHand: 1998, status: ProductStatus.ACTIVE, promoted: false, variants: [],
     },
     {
       _id: IDS.products.mouse, sku: 'WM-001', name: 'Wireless Mouse',
       category: ProductCategory.HARDWARE,
       description: 'Bluetooth mouse. The classic laptop attach.',
       unitPrice: money(30), costPrice: money(12), unit: 'Each', taxPct: 15,
-      isSubscription: false, quantityOnHand: 400, status: ProductStatus.ACTIVE, promoted: false, variants: [],
+      // 400 at Main + 60 at East.
+      isSubscription: false, quantityOnHand: 460, status: ProductStatus.ACTIVE, promoted: false, variants: [],
     },
     {
       _id: IDS.products.carePlan2yr, sku: 'CP-2Y', name: 'Care Plan 2yr',

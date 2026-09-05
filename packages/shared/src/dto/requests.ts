@@ -39,6 +39,7 @@ import type {
   PriceListDto,
   PriceListEntryDto,
   ProductDto,
+  ProductWarehouseStockDto,
   QuotationDto,
   QuotationSummaryDto,
   ReplenishmentRuleDto,
@@ -129,6 +130,15 @@ export interface UpsertCustomerRequest {
 
 /* ------------------------------------------------------------------ products */
 
+/**
+ * An opening stock allocation, typed into the New Product form.
+ * Only a stocked category (HARDWARE) accepts these — see `isStockedCategory`.
+ */
+export interface ProductWarehouseStockInput {
+  warehouseId: Id;
+  inStock: number;
+}
+
 export interface UpsertProductRequest {
   sku?: string;
   name: string;
@@ -144,6 +154,32 @@ export interface UpsertProductRequest {
   promoted?: boolean;
   variants?: ProductDto['variants'];
   status?: ProductDto['status'];
+  /**
+   * Opening stock per warehouse, accepted by `POST /products` only, and only
+   * for a stocked category. When present it also sets `quantityOnHand`, so the
+   * catalogue figure and the warehouses cannot disagree on day one.
+   */
+  warehouseStock?: ProductWarehouseStockInput[];
+}
+
+/**
+ * `GET /products/:id/stock` — screen 17's Warehouse Stock card.
+ * Every ACTIVE warehouse is listed (plus any inactive one still holding stock),
+ * so a hardware product that has never been stocked shows real warehouses at
+ * zero rather than an empty table.
+ */
+export interface ProductStockDto {
+  productId: Id;
+  productName: string;
+  category: ProductCategory;
+  /** False for SERVICES and SUBSCRIPTION, where `warehouses` is always empty. */
+  stocked: boolean;
+  warehouses: ProductWarehouseStockDto[];
+  totalInStock: number;
+  totalReserved: number;
+  totalAvailable: number;
+  /** The catalogue figure on the product, for the UI to reconcile against the total. */
+  quantityOnHand: number;
 }
 
 /* ------------------------------------------------------------------ price lists (screen 17) */

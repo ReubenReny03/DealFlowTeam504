@@ -525,11 +525,18 @@ currencies"), Variants ("N SKUs"). Then the table: Product name · Category ·
 Variants · Price · Unit · Tax · Status. A subscription product's price shows
 `/month`. Buttons: **+ New Product**, **Manage Price Fields**.
 
+**New Product** is category-aware. Choose **Hardware** and the flat *Quantity on
+hand* box is replaced by **Opening stock by warehouse** — one number per active
+warehouse, with the resulting quantity on hand adding up live underneath, so a
+hardware product is stocked where it is created rather than in a second visit to
+another screen. Any other category keeps the plain quantity box and is never
+asked about warehouses.
+
 ---
 
 ## Screen 17 — Product Details · `/admin/products/:id` · Agent A
 
-Three blocks:
+Four blocks (the last one only for hardware):
 
 **General Info** — name, category, price, unit, tax, quantity on hand,
 description, **Subscription Yes/No**, and — only when Yes — **Recurring**. With
@@ -543,6 +550,18 @@ the period."*
 `price minus 10 percent base`). With: *"A tier's price rule sets what the
 customer pays. It is separate from the tier's discount ceiling, which lives on
 the Discount Tiers & Approvals screen."*
+
+**Warehouse Stock** — **HARDWARE only.** Warehouse · In stock · Reserved ·
+Available, one row per active warehouse (zeroes included, so a product that has
+never been stocked still names the warehouses it could be stocked in), a totals
+row, and a replenishment date where one is inbound. A services or subscription
+product does not show the card at all — it is delivered, never shelved. When the
+catalogue's `quantityOnHand` and the warehouse total disagree, the card says so
+and names the warehouse figure as the one the split planner uses.
+
+The card is read-only: quantities move through a restock or a write-down on
+screen 7, so every change carries a reason into the audit trail. The one
+exception is creation — see screen 16.
 
 ---
 
