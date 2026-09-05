@@ -96,6 +96,26 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
   },
 ];
 
+/**
+ * Accounts that exist but are NOT demo logins.
+ *
+ * A deactivated former rep, so the Admin Users screen shows both states on first
+ * load and the Deactivate/Reactivate control has something real to act on. It is
+ * deliberately outside DEMO_ACCOUNTS: that list is rendered into the login
+ * screen, the README and docs/CREDENTIALS.md as credentials that work, and this
+ * one is supposed to fail — signing in as T. Bose is the demonstration that a
+ * deactivated account is refused.
+ */
+const NON_LOGIN_ACCOUNTS = [
+  {
+    id: String(IDS.users.bose),
+    name: 'T. Bose',
+    email: 'bose@dealflow360.test',
+    role: Role.SALES_REP,
+    active: false,
+  },
+];
+
 /** Trailing average discount % per rep — the baseline the anomaly rule compares against. */
 export const REP_TRAILING_AVG: Record<string, number> = {
   [String(IDS.users.rao)]: 8,
@@ -104,8 +124,8 @@ export const REP_TRAILING_AVG: Record<string, number> = {
 
 export async function seedUsers(_ctx: SeedContext): Promise<void> {
   const passwordHash = await bcrypt.hash(env.demoPassword, env.bcryptRounds);
-  await User.insertMany(
-    DEMO_ACCOUNTS.map((a) => ({
+  await User.insertMany([
+    ...DEMO_ACCOUNTS.map((a) => ({
       _id: a.id,
       name: a.name,
       email: a.email,
@@ -113,9 +133,25 @@ export async function seedUsers(_ctx: SeedContext): Promise<void> {
       role: a.role,
       customerId: a.customerId,
       active: true,
+      // Demo logins are advertised credentials — on the login screen, in the
+      // README and in docs/CREDENTIALS.md — so they are explicitly exempt from
+      // the first-sign-in password prompt. If a judge changed one, the published
+      // password would immediately be wrong. The prompt is demonstrated by
+      // creating an account on screen 19, which is where it belongs.
+      mustChangePassword: false,
       trailingAvgDiscountPct: REP_TRAILING_AVG[a.id] ?? 0,
     })),
-  );
+    ...NON_LOGIN_ACCOUNTS.map((a) => ({
+      _id: a.id,
+      name: a.name,
+      email: a.email,
+      passwordHash,
+      role: a.role,
+      active: a.active,
+      mustChangePassword: false,
+      trailingAvgDiscountPct: 0,
+    })),
+  ]);
 }
 
 /** Rendered by the reset script, the seed and `npm run docs:credentials`. */

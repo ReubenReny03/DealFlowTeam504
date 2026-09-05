@@ -217,19 +217,33 @@ persona's own screen. No typing.
 That panel is a demo accelerator, not a product feature. In a production build it
 is not rendered at all, and the server refuses to list the accounts.
 
-### Signing up for real
+### Getting an account
 
-*Create one* opens a signup form: full name, email, password, and a **Team**
-selector — Sales Rep, Sales Manager, Finance, Admin, or Customer.
+There is no signup form. The login page says so:
 
-Choosing **Customer** reveals a second field, **Company**, with the helper text:
+> *"Accounts are issued by an administrator — there is no self-service signup."*
 
-> *"Your account will only ever be able to open this company's quotations."*
+An Admin creates every account on **screen 19** (`/admin/users`): full name,
+email, a temporary password, and a role. Choosing **Customer** reveals a required
+**Company** field, with the helper text:
+
+> *"This account will only ever open this company's quotations."*
 
 That is not a warning; it is the model. A customer account is scoped to exactly
-one company, permanently.
+one company, permanently — which is also why nobody may self-serve one. See
+D-034.
 
-After signup you are signed in and dropped on your role's landing screen.
+The Admin can also **edit** an account from that screen — rename it, change the
+email, move an internal user between internal roles, move a portal login to a
+different company, or reset the password — and deactivating takes effect on that
+account's very next request, not whenever its token happens to expire (D-035).
+
+**First sign-in.** Because the password was typed by whoever created the account,
+signing in for the first time lands on *Choose your password* rather than the
+workspace. It is an offer: **Skip for now** carries on, and the prompt returns at
+the next sign-in until they set their own (D-036). Seeded demo logins are exempt,
+so the one-click Demo accounts panel still drops you straight on a persona's
+screen.
 
 ### What the Admin must configure before anyone can quote
 

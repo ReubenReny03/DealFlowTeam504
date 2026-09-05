@@ -62,7 +62,8 @@ import { SessionStore } from '../../core/state/session.store';
           </form>
 
           <p class="mt-6 text-sm text-slate-500">
-            No account yet? <a routerLink="/signup" class="font-medium text-brand-600 hover:underline">Create one</a>
+            Accounts are issued by an administrator — there is no self-service signup. Ask yours to
+            add you on the Users screen.
           </p>
         </div>
       </div>
@@ -146,6 +147,14 @@ export class LoginPage implements OnInit {
 
   private async go(): Promise<void> {
     const redirect = this.route.snapshot.queryParamMap.get('redirect');
+    // An account still on the password somebody else typed is offered the chance
+    // to pick its own first; wherever it was headed is carried through.
+    if (this.session.mustChangePassword()) {
+      await this.router.navigate(['/change-password'], {
+        queryParams: redirect ? { redirect } : {},
+      });
+      return;
+    }
     await this.router.navigateByUrl(redirect ?? this.session.landingRoute());
   }
 }

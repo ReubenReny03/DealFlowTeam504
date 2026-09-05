@@ -122,9 +122,9 @@ Two endpoints carry two lists in one payload and so page each independently:
 
 | M    | Path                  | Auth | Request         | Response           | Status |
 | ---- | --------------------- | ---- | --------------- | ------------------ | ------ |
-| POST | `/auth/login`         | none | `LoginRequest`  | `AuthSessionDto`   | ✅     |
-| POST | `/auth/signup`        | none | `SignupRequest` | `AuthSessionDto`   | ✅     |
-| GET  | `/auth/me`            | any  | —               | `UserDto`          | ✅     |
+| POST | `/auth/login`           | none | `LoginRequest`          | `AuthSessionDto`   | ✅     |
+| POST | `/auth/change-password` | any  | `ChangePasswordRequest` | `UserDto`          | ✅     |
+| GET  | `/auth/me`              | any  | —                       | `UserDto`          | ✅     |
 | GET  | `/auth/demo-accounts` | none | —               | `DemoAccountDto[]` | ✅     |
 
 `POST /auth/login`
@@ -160,6 +160,25 @@ non-draft quotation. The full list is one call away at `GET /portal/quotations`.
 `GET /auth/demo-accounts` returns `[]` unless `SHOW_DEMO_LOGINS=true`.
 Errors: `401 UNAUTHENTICATED` on a bad pair — identical message either way, so
 nothing leaks about which half was wrong.
+
+**There is no `POST /auth/signup`.** A public signup endpoint lets anyone mint
+themselves an ADMIN, or attach a portal account to a company they have nothing to
+do with. Accounts are created by an Admin on `POST /users` (screen 19), which is
+audited and validates the company link. See D-021.
+
+`POST /auth/change-password` is the account holder setting their **own**
+password: it takes no id — so it cannot be pointed at another account — and it
+requires the current password. It clears `mustChangePassword`, which is what
+stops the first-sign-in prompt from reappearing. `400` on a wrong current
+password, or on a new password identical to the old one.
+
+**Every guarded request re-reads the account.** `requireAuth` verifies the JWT
+*and* then loads the user: a missing or inactive account is `401`, and the role
+enforced is the one in the database, not the one the token was minted with. A JWT
+is a bearer token that cannot be recalled, so without this an account deactivated
+on screen 19 would keep working until its token expired, and a demoted user would
+keep the rights they had when they signed in. The cost is one indexed lookup per
+authenticated request.
 
 ---
 
@@ -228,9 +247,39 @@ Errors: `400` if `reason` is missing · `404` if governance has never been saved
 | GET        | `/subscription-plans`             | any   | `SubscriptionPlanDto[]` | ✅     |
 | POST       | `/subscription-plans`             | ADMIN | `SubscriptionPlanDto`   | ✅     |
 | GET        | `/customers` · `/customers/:id`   | any   | `CustomerDto`           | ✅     |
-| GET        | `/users?role=`                    | ADMIN | `UserDto[]`             | ✅     |
+| GET        | `/users?role=&customerId=&active=` | ADMIN | `UserListDto`          | ✅     |
+| GET        | `/users/:id`                      | ADMIN | `UserDto`               | ✅     |
+| POST       | `/users`                          | ADMIN | `CreateUserRequest`     | `UserDto` · ✅ |
+| PATCH      | `/users/:id`                      | ADMIN | `UpdateUserRequest`     | `UserDto` · ✅ |
 
-Filters: `/products?category=&status=&q=` · `/customers?tier=&ownerId=&q=`
+Filters: `/products?category=&status=&q=` · `/customers?tier=&ownerId=&q=` ·
+`/users?role=&customerId=&active=&q=`
+
+**First sign-in.** `UserDto.mustChangePassword` is true while an account is still
+on the password whoever created it typed. `POST /users` sets it (default `true`,
+overridable), an Admin password reset re-arms it, and
+`POST /auth/change-password` clears it. The UI *offers* the change at sign-in
+rather than blocking on it — **Skip for now** leaves the flag set, so the offer
+returns next time. Making it mandatory would be a guard on this same flag; that
+is deliberately not what ships. See D-036.
+
+**Users (screen 19).** `POST /users` is the only way an account is created.
+`customerId` is **required** when `role` is `CUSTOMER` — a portal login is scoped
+to exactly one company for its whole life — and **refused** for every internal
+role (`400`). The company must exist and be active. `PATCH /users/:id` may rename,
+deactivate, change an internal role, or move a portal login to another company;
+it refuses to convert an account between internal and portal (that would strand
+the quotations and audit entries already naming it), to deactivate your own
+account, or to remove the last active Admin. It also renames, changes the email
+(`409` on one already in use) and resets the password — `password` on `PATCH` is
+an **Admin reset**, which deliberately does not ask for the current password,
+because an Admin resetting a forgotten one does not have it. A reset writes a
+`USER_PASSWORD_RESET` audit entry; the password itself is never in the audit
+before/after.
+
+Neither read returns `passwordHash`: the projection keeps it in Mongo and
+`toUserDto` strips it again. These endpoints do **not** use `mountReadonly`,
+precisely because that serialises the raw document.
 
 `GET /products/:id/stock` answers for **every** product, so screen 17 can ask
 without branching first: a category that is never shelved (SERVICES,

@@ -45,6 +45,8 @@ export class SessionStore {
   readonly portalToken = computed(() => this.state()?.portalToken ?? null);
   readonly portalQuotationId = computed(() => this.state()?.portalQuotationId ?? null);
   readonly role = computed<Role | null>(() => this.state()?.user.role ?? null);
+  /** Still on a password somebody else typed — the sign-in flow offers to fix that. */
+  readonly mustChangePassword = computed(() => this.state()?.user.mustChangePassword === true);
   readonly isAuthenticated = computed(() => {
     const s = this.state();
     return !!s && new Date(s.expiresAt).getTime() > Date.now();
@@ -107,7 +109,7 @@ export class SessionStore {
       expiresAt: current?.expiresAt ?? new Date(Date.now() + 86_400_000).toISOString(),
       user:
         current?.user ??
-        ({ id: 'portal', name: 'Guest', email: '', role: Role.CUSTOMER, active: true, landingRoute: '/portal', createdAt: '', updatedAt: '' } as UserDto),
+        ({ id: 'portal', name: 'Guest', email: '', role: Role.CUSTOMER, active: true, mustChangePassword: false, landingRoute: '/portal', createdAt: '', updatedAt: '' } as UserDto),
       portalToken: token,
       portalQuotationId: current?.portalQuotationId,
     });
@@ -118,9 +120,25 @@ export class SessionStore {
     return expiredOnLoad;
   }
 
-  landingRoute(): string {
+  /** Where this role works. Never the password prompt, so "Skip" cannot loop. */
+  roleLandingRoute(): string {
     const role = this.role();
     return role ? LANDING_ROUTE[role] : '/login';
+  }
+
+  landingRoute(): string {
+    return this.roleLandingRoute();
+  }
+
+  /**
+   * Replace the stored user after it changes server-side (setting a password
+   * clears `mustChangePassword`). The token is untouched — it never carried the
+   * flag, and the API re-reads the account on every request anyway.
+   */
+  updateUser(user: UserDto): void {
+    const current = this.state();
+    if (!current) return;
+    this.persist({ ...current, user });
   }
 
   logout(redirect = true): void {

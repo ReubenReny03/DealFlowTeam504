@@ -46,6 +46,8 @@ export const IDS = {
     iyer: fid(G.USER, 5),
     priya: fid(G.USER, 6),
     das: fid(G.USER, 7),
+    /** A deactivated former rep. Not a demo login — see users.seed.ts. */
+    bose: fid(G.USER, 8),
   },
   customers: {
     acme: fid(G.CUSTOMER, 1),

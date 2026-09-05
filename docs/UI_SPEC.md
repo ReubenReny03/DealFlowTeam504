@@ -565,6 +565,40 @@ exception is creation — see screen 16.
 
 ---
 
+## Screen 19 — Users · `/admin/users` · Agent A
+
+**Admin only** — a Sales Manager reaches the rest of the back-end but not this
+tab, and the route guards it as well as hiding it.
+
+Table: Name · Email · Role · Company · Status, with the search box, role filter
+and paginator every list view has. Your own row is chipped **you** and has no
+Deactivate control. Buttons: **+ New User**.
+
+**New user** — full name, email, temporary password, role. The role picker is the
+screen: choose an internal role and a one-line hint says what it can do; choose
+**Customer** and a required **Company** select appears, because a portal login is
+scoped to exactly one company for its whole life and can only ever open that
+company's quotations. Under the table: *"Deactivating takes effect on the
+account's very next request — the API re-reads the account on every call rather
+than trusting a token that was already issued."*
+
+**Edit user** — same modal shape as create, opened from the row's **Edit**. Name
+and email always; **Role** for an internal user (internal roles only) or
+**Company** for a portal login, never both, because an account cannot cross that
+line. A *Set a new password for them* checkbox reveals the reset field, and an
+*Account is active* checkbox that is disabled on your own row. A row still on its
+issued password carries an amber **new password pending** chip.
+
+**Choose your password** · `/change-password` — where a first sign-in lands.
+Current, new, confirm, and **Skip for now**, which goes on to the workspace and
+leaves the prompt for next time (D-036). The same screen is the plain "change my
+password" form for anyone already past that.
+
+There is **no signup screen**. The login page says so: *"Accounts are issued by an
+administrator — there is no self-service signup."* See D-034.
+
+---
+
 ## Screen 18 — Discount Tiers & Approvals · `/admin/config` · Agent A
 
 **The screen that proves nothing is hardcoded.**

@@ -9,7 +9,41 @@ import { toDto } from '../../utils/serialize.js';
 export function toUserDto(doc: any): UserDto {
   const dto = toDto<any>(doc);
   delete dto.passwordHash;
-  return { ...dto, landingRoute: LANDING_ROUTE[dto.role as Role] ?? '/app/dashboard' };
+  return {
+    ...dto,
+    // Always a boolean on the wire: the UI branches on it right after login, and
+    // an older row that predates the field has simply never been reset.
+    mustChangePassword: dto.mustChangePassword === true,
+    landingRoute: LANDING_ROUTE[dto.role as Role] ?? '/app/dashboard',
+  };
+}
+
+/**
+ * The account holder setting their own password.
+ *
+ * Requires the current one — an Admin reset (PATCH /users/:id) is the path that
+ * does not, because an Admin resetting a forgotten password does not have it.
+ * Clearing `mustChangePassword` here is the whole point: it is what makes the
+ * first-sign-in prompt stop appearing.
+ */
+export async function changePassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<UserDto> {
+  const user = await User.findById(userId);
+  if (!user || !user.active) throw unauthenticated();
+
+  const okPassword = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!okPassword) throw badRequest('That is not your current password.');
+  if (await bcrypt.compare(newPassword, user.passwordHash)) {
+    throw badRequest('Your new password must be different from the current one.');
+  }
+
+  user.passwordHash = await bcrypt.hash(newPassword, env.bcryptRounds);
+  user.mustChangePassword = false;
+  await user.save();
+  return toUserDto(user);
 }
 
 export async function login(email: string, password: string): Promise<AuthSessionDto> {
@@ -51,35 +85,4 @@ export async function login(email: string, password: string): Promise<AuthSessio
     }
   }
   return session;
-}
-
-export async function signup(input: {
-  name: string;
-  email: string;
-  password: string;
-  role: Role;
-  customerId?: string;
-}): Promise<AuthSessionDto> {
-  const email = input.email.toLowerCase().trim();
-  if (await User.exists({ email })) throw badRequest('An account with that email already exists.');
-  if (input.role === Role.CUSTOMER && !input.customerId) {
-    throw badRequest('A customer account must be linked to a company.');
-  }
-  const passwordHash = await bcrypt.hash(input.password, env.bcryptRounds);
-  const user = await User.create({
-    name: input.name,
-    email,
-    passwordHash,
-    role: input.role,
-    customerId: input.customerId,
-    active: true,
-  });
-  const { token, expiresAt } = signToken({
-    sub: String(user._id),
-    role: user.role,
-    name: user.name,
-    email: user.email,
-    customerId: user.customerId ? String(user.customerId) : undefined,
-  });
-  return { token, expiresAt, user: toUserDto(user) };
 }

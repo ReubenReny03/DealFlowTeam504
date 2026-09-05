@@ -266,6 +266,11 @@ export const EMPTY_STATES: Record<string, { title: string; body: string; cta?: s
     body: 'An order cannot be split or reserved until at least one warehouse exists with a shipping cost weight and a lead time.',
     cta: '+ New Warehouse',
   },
+  users: {
+    title: 'No accounts match',
+    body: 'Every account is created here — there is no public signup. An internal account opens the sales workspace; a customer account is a portal login scoped to one company.',
+    cta: '+ New User',
+  },
   plans: {
     title: 'No subscription plans yet',
     body: 'A recurring line needs a plan before it can generate a billing schedule with its own proration and cancellation rules.',

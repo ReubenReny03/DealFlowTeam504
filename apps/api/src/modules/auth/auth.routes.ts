@@ -1,22 +1,23 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { ALL_ROLES, Role } from '@dealflow/shared';
+import { AuditEntity } from '@dealflow/shared';
 import { env } from '../../config/env.js';
 import { User } from '../../db/models.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { unauthenticated } from '../../utils/apiError.js';
-import { created, ok } from '../../utils/respond.js';
+import { ok } from '../../utils/respond.js';
 import { DEMO_ACCOUNTS } from '../../seed/users.seed.js';
+import { writeAudit } from '../../utils/audit.js';
 import { mountModuleHealth } from '../module.health.js';
-import { login, signup, toUserDto } from './auth.service.js';
+import { changePassword, login, toUserDto } from './auth.service.js';
 
 export const authRouter = Router();
 
 mountModuleHealth(authRouter, {
   module: 'auth', owner: 'A', screens: [1],
-  implemented: ['POST /login', 'POST /signup', 'GET /me', 'GET /demo-accounts'],
+  implemented: ['POST /login', 'POST /change-password', 'GET /me', 'GET /demo-accounts'],
   todo: ['password reset (out of scope — see docs/FEATURE_PRIORITY.md P3)'],
 });
 
@@ -33,20 +34,43 @@ authRouter.post(
   }),
 );
 
-const signupSchema = z.object({
-  name: z.string().min(2),
-  email: z.string().email(),
-  password: z.string().min(6),
-  role: z.enum(ALL_ROLES as [Role, ...Role[]]),
-  customerId: z.string().optional(),
-  team: z.string().optional(),
+/*
+ * There is deliberately no POST /signup.
+ *
+ * Anyone could otherwise mint themselves an ADMIN account, or a CUSTOMER account
+ * pointed at a company they have nothing to do with, from an unauthenticated
+ * endpoint. Accounts are created by an Admin on /admin/users, which is audited
+ * and where the company link is validated. See docs/DECISIONS.md D-034.
+ */
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Your current password is required.'),
+  newPassword: z.string().min(6, 'A password must be at least 6 characters.'),
 });
 
+/**
+ * Offered right after a first sign-in, and usable at any time after that.
+ * Anyone signed in may change their OWN password; there is no id in the path,
+ * so this endpoint cannot be pointed at somebody else's account.
+ */
 authRouter.post(
-  '/signup',
-  validate(signupSchema),
+  '/change-password',
+  requireAuth(),
+  validate(changePasswordSchema),
   asyncHandler(async (req, res) => {
-    created(res, await signup(req.body));
+    const { currentPassword, newPassword } = req.body as z.infer<typeof changePasswordSchema>;
+    const user = await changePassword(req.user!.id, currentPassword, newPassword);
+
+    await writeAudit({
+      actor: { id: req.user!.id, name: req.user!.name, role: req.user!.role },
+      action: 'PASSWORD_CHANGED',
+      entity: AuditEntity.USER,
+      entityId: req.user!.id,
+      entityLabel: req.user!.name,
+      reason: 'Account holder set their own password',
+    });
+
+    ok(res, user);
   }),
 );
 

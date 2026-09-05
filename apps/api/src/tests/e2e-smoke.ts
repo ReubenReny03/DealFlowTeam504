@@ -27,6 +27,7 @@ import { env } from '../config/env.js';
 import { connectMongo, disconnectMongo } from '../db/connection.js';
 import { syncAllIndexes } from '../db/models.js';
 import { runSeed } from '../seed/seed.js';
+import { DEMO_ACCOUNTS } from '../seed/users.seed.js';
 import { PRIYA_PORTAL_TOKEN } from '../seed/modules/approvals.seed.js';
 import { log } from '../utils/logger.js';
 import { waitForMongo } from '../../../../scripts/wait-for-mongo.js';
@@ -997,6 +998,233 @@ async function main(): Promise<void> {
       assert(boardStages.includes('APPROVED'), "Finance's board must keep the Approved lane");
 
       return `approvals ${financeQueue.body.data.items.length} of ${managerQueue.body.data.items.length} · quotations ${financeQuotes.body.meta.total} of ${managerQuotes.body.meta.total} · board lanes ${boardStages.join('/')}`;
+    },
+  );
+
+  /* ---- 19. Accounts are issued, not self-served — and a token is not a licence ---- */
+  await step(
+    19,
+    'Only an Admin creates accounts, and deactivating one takes effect on the next request',
+    'A',
+    async () => {
+      const admin = tokens[Role.ADMIN];
+      const rep = tokens[Role.SALES_REP];
+
+      // There is no public signup: nobody can mint themselves an account.
+      const selfServe = await api('POST', '/auth/signup', {
+        body: { name: 'Mallory', email: 'mallory@evil.test', password: 'Demo@123', role: 'ADMIN' },
+      });
+      assert(
+        selfServe.status === 404,
+        `POST /auth/signup must not exist, got ${selfServe.status}`,
+      );
+
+      // Creating accounts is Admin-only.
+      const byRep = await api('POST', '/users', {
+        token: rep,
+        body: { name: 'Sneaky Rep', email: 'sneaky@dealflow360.test', password: 'Demo@123', role: 'SALES_REP' },
+      });
+      assert(byRep.status === 403, `a rep must not create accounts, got ${byRep.status}`);
+
+      // The list never carries a password hash, to an Admin or to anyone.
+      const list = await api('GET', '/users?pageSize=100', { token: admin });
+      assert(list.status === 200, `user list failed: ${list.body.error?.message}`);
+      assert(
+        list.body.data.items.every((u: any) => u.passwordHash === undefined),
+        'the user list must never carry a password hash',
+      );
+      assert(
+        list.body.data.items.some((u: any) => u.active === false),
+        'the seed should include a deactivated account so the screen shows both states',
+      );
+
+      // A portal login must name a company; an internal one must not.
+      const customers = await api('GET', '/customers', { token: admin });
+      const orion = customers.body.data.find((c: any) => c.name === 'Orion Ltd');
+      assert(orion, 'expected Orion Ltd in the seed');
+      const noCompany = await api('POST', '/users', {
+        token: admin,
+        body: { name: 'Portal Person', email: 'portal@orion.test', password: 'Demo@123', role: 'CUSTOMER' },
+      });
+      assert(noCompany.status === 400, 'a customer account without a company must be refused');
+      const strayCompany = await api('POST', '/users', {
+        token: admin,
+        body: { name: 'Stray', email: 'stray@dealflow360.test', password: 'Demo@123', role: 'FINANCE', customerId: orion.id },
+      });
+      assert(strayCompany.status === 400, 'an internal account must not carry a company');
+
+      // The real thing: a portal login for a company that had none.
+      const createdUser = await api('POST', '/users', {
+        token: admin,
+        body: { name: 'N. Orion', email: 'portal@orion.test', password: 'Demo@123', role: 'CUSTOMER', customerId: orion.id },
+      });
+      assert(createdUser.status === 201, `create failed: ${createdUser.body.error?.message}`);
+      assert(
+        createdUser.body.data.customerId === orion.id && createdUser.body.data.passwordHash === undefined,
+        'a new portal login must carry its company and no password hash',
+      );
+
+      // It signs in, and the list shows which company it belongs to.
+      const session = await api('POST', '/auth/login', {
+        body: { email: 'portal@orion.test', password: 'Demo@123' },
+      });
+      assert(session.status === 200, 'the new account could not sign in');
+      const newToken = session.body.data.token;
+      const listed = await api('GET', '/users?q=N. Orion', { token: admin });
+      assert(
+        listed.body.data.items[0]?.customerName === 'Orion Ltd',
+        'the user list must resolve the company name for a portal login',
+      );
+
+      // A JWT is a bearer token we cannot recall, so the API re-reads the account:
+      // deactivating takes effect on the very next request with the SAME token.
+      const beforeRevoke = await api('GET', '/auth/me', { token: newToken });
+      assert(beforeRevoke.status === 200, 'the fresh token should work');
+      const deactivated = await api('PATCH', `/users/${createdUser.body.data.id}`, {
+        token: admin,
+        body: { active: false },
+      });
+      assert(deactivated.status === 200, `deactivate failed: ${deactivated.body.error?.message}`);
+      const afterRevoke = await api('GET', '/quotations', { token: newToken });
+      assert(
+        afterRevoke.status === 401,
+        `a deactivated account's existing token must stop working, got ${afterRevoke.status}`,
+      );
+      const loginAfter = await api('POST', '/auth/login', {
+        body: { email: 'portal@orion.test', password: 'Demo@123' },
+      });
+      assert(loginAfter.status === 401, 'a deactivated account must not be able to sign in again');
+
+      // An Admin cannot strand everyone by deactivating themselves.
+      const self = await api('PATCH', `/users/${DEMO_ACCOUNTS[0].id}`, {
+        token: admin,
+        body: { active: false },
+      });
+      assert(self.status === 400, 'an Admin must not be able to deactivate their own account');
+
+      return 'no public signup · rep 403 · no hash on the wire · Orion portal login created, then revoked mid-token';
+    },
+  );
+
+  /* ---- 20. An Admin edits accounts; the holder picks their own password ---- */
+  await step(
+    20,
+    'An Admin can edit an account, and a new account is asked to set its own password',
+    'A',
+    async () => {
+      const admin = tokens[Role.ADMIN];
+
+      // A new account starts on a password somebody else typed, and says so.
+      const createdUser = await api('POST', '/users', {
+        token: admin,
+        body: { name: 'E. Editable', email: 'editable@dealflow360.test', password: 'Temp@123', role: 'SALES_REP' },
+      });
+      assert(createdUser.status === 201, `create failed: ${createdUser.body.error?.message}`);
+      const userId = createdUser.body.data.id;
+      assert(
+        createdUser.body.data.mustChangePassword === true,
+        'a new account must be asked to choose its own password',
+      );
+
+      // Editing: name, email and an internal role change all land together.
+      const edited = await api('PATCH', `/users/${userId}`, {
+        token: admin,
+        body: { name: 'E. Edited', email: 'edited@dealflow360.test', role: 'FINANCE' },
+      });
+      assert(edited.status === 200, `edit failed: ${edited.body.error?.message}`);
+      assert(
+        edited.body.data.name === 'E. Edited' &&
+          edited.body.data.email === 'edited@dealflow360.test' &&
+          edited.body.data.role === 'FINANCE',
+        'the edit did not take',
+      );
+      assert(edited.body.data.passwordHash === undefined, 'an edit response must not carry the hash');
+
+      // An email already in use is refused rather than silently duplicating.
+      const clash = await api('PATCH', `/users/${userId}`, {
+        token: admin,
+        body: { email: 'admin@dealflow360.test' },
+      });
+      assert(clash.status === 409, `a duplicate email must conflict, got ${clash.status}`);
+
+      // The holder sets their own password, and the flag clears.
+      const session = await api('POST', '/auth/login', {
+        body: { email: 'edited@dealflow360.test', password: 'Temp@123' },
+      });
+      assert(session.status === 200, 'the new account could not sign in');
+      assert(
+        session.body.data.user.mustChangePassword === true,
+        'the sign-in response must tell the UI to offer a password change',
+      );
+      const userToken = session.body.data.token;
+
+      const wrongCurrent = await api('POST', '/auth/change-password', {
+        token: userToken,
+        body: { currentPassword: 'NotIt@123', newPassword: 'Mine@4567' },
+      });
+      assert(wrongCurrent.status === 400, 'changing a password must prove the current one');
+      const sameAgain = await api('POST', '/auth/change-password', {
+        token: userToken,
+        body: { currentPassword: 'Temp@123', newPassword: 'Temp@123' },
+      });
+      assert(sameAgain.status === 400, 'the new password must differ from the old one');
+
+      const changed = await api('POST', '/auth/change-password', {
+        token: userToken,
+        body: { currentPassword: 'Temp@123', newPassword: 'Mine@4567' },
+      });
+      assert(changed.status === 200, `change-password failed: ${changed.body.error?.message}`);
+      assert(
+        changed.body.data.mustChangePassword === false,
+        'setting your own password must clear the prompt',
+      );
+
+      const oldPassword = await api('POST', '/auth/login', {
+        body: { email: 'edited@dealflow360.test', password: 'Temp@123' },
+      });
+      assert(oldPassword.status === 401, 'the old password must stop working');
+      const newPassword = await api('POST', '/auth/login', {
+        body: { email: 'edited@dealflow360.test', password: 'Mine@4567' },
+      });
+      assert(
+        newPassword.status === 200 && newPassword.body.data.user.mustChangePassword === false,
+        'the new password must work, with no prompt left',
+      );
+
+      // An Admin reset puts the prompt back — a reset password is one they did
+      // not choose either.
+      const reset = await api('PATCH', `/users/${userId}`, {
+        token: admin,
+        body: { password: 'Reset@123' },
+      });
+      assert(reset.status === 200, `reset failed: ${reset.body.error?.message}`);
+      assert(
+        reset.body.data.mustChangePassword === true,
+        'an Admin reset must ask the holder to choose their own again',
+      );
+      const afterReset = await api('POST', '/auth/login', {
+        body: { email: 'edited@dealflow360.test', password: 'Reset@123' },
+      });
+      assert(afterReset.status === 200, 'the reset password must work');
+
+      // Nobody may change somebody else's password through this endpoint: it
+      // takes no id, and it requires the current password.
+      const notMine = await api('POST', '/auth/change-password', {
+        token: tokens[Role.SALES_REP],
+        body: { currentPassword: 'Reset@123', newPassword: 'Sneaky@123' },
+      });
+      assert(notMine.status === 400, "one account's password must not open another's");
+
+      // A demo login is exempt, or the published credentials would go stale.
+      const demo = await api('POST', '/auth/login', {
+        body: { email: 'rep@dealflow360.test', password: DEMO_ACCOUNTS[1].password },
+      });
+      assert(
+        demo.body.data.user.mustChangePassword === false,
+        'seeded demo logins must not be prompted — their passwords are published',
+      );
+
+      return 'created → prompted → edited (name/email/role) → holder set their own → Admin reset re-armed the prompt';
     },
   );
 

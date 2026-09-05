@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { SessionStore } from '../core/state/session.store';
 
@@ -18,7 +18,7 @@ import { SessionStore } from '../core/state/session.store';
           </a>
           <nav class="df-scroll-x flex-1">
             <ul class="flex items-center gap-1">
-              @for (item of nav; track item.route) {
+              @for (item of nav(); track item.route) {
                 <li>
                   <a [routerLink]="item.route" routerLinkActive="bg-white/15 text-white"
                      class="block whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white">{{ item.label }}</a>
@@ -36,11 +36,17 @@ import { SessionStore } from '../core/state/session.store';
 })
 export class AdminShellComponent {
   protected readonly session = inject(SessionStore);
-  protected readonly nav = [
+
+  /**
+   * A Sales Manager reaches the back-end for the catalogue, but accounts are
+   * Admin-only — the route guards it and the tab does not offer it either.
+   */
+  protected readonly nav = computed(() => [
     { label: 'Products', route: '/admin/products' },
     { label: 'Price Lists', route: '/admin/pricelists' },
     { label: 'Warehouses', route: '/admin/warehouses' },
     { label: 'Subscription Plans', route: '/admin/plans' },
     { label: 'Discount Tiers & Approvals', route: '/admin/config' },
-  ];
+    ...(this.session.isAdmin() ? [{ label: 'Users', route: '/admin/users' }] : []),
+  ]);
 }

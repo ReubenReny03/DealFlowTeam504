@@ -66,16 +66,40 @@ export async function attachUser(req: Request, _res: Response, next: NextFunctio
 /**
  * Gate a route on authentication and, optionally, on a set of roles.
  * `requireAuth()` = any logged-in user. `requireAuth([Role.FINANCE])` = Finance only.
+ *
+ * A valid signature is NOT the same as a valid account, so every guarded request
+ * re-reads the user. A JWT is a bearer token we cannot recall: without this, an
+ * account deactivated on the admin Users screen keeps working until its token
+ * expires, and a demoted user keeps the rights their old token was minted with.
+ * The role enforced below is therefore the one in the database, not the one in
+ * the token — one indexed lookup per request, which is the price of being able
+ * to revoke access at all.
  */
 export function requireAuth(roles?: Role[]) {
-  return (req: Request, _res: Response, next: NextFunction): void => {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     if (!req.user) return next(unauthenticated());
-    if (roles && roles.length > 0 && !roles.includes(req.user.role)) {
-      return next(
-        forbidden(`This action requires one of: ${roles.join(', ')}. You are signed in as ${req.user.role}.`),
-      );
+    try {
+      const account: any = await User.findById(req.user.id).select('role active customerId name email').lean();
+      if (!account || account.active === false) {
+        return next(unauthenticated('Your account is no longer active. Please sign in again.'));
+      }
+      // The token is a snapshot; the row is the truth.
+      req.user = {
+        id: String(account._id),
+        name: account.name,
+        email: account.email,
+        role: account.role,
+        customerId: account.customerId ? String(account.customerId) : undefined,
+      };
+      if (roles && roles.length > 0 && !roles.includes(req.user.role)) {
+        return next(
+          forbidden(`This action requires one of: ${roles.join(', ')}. You are signed in as ${req.user.role}.`),
+        );
+      }
+      next();
+    } catch (err) {
+      next(err);
     }
-    next();
   };
 }
 

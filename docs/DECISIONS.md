@@ -213,3 +213,36 @@ repo was scaffolded on.)*
 **D-033 — Mock mode for the frontend.**
 `environment.useMocks = true` answers every request from in-memory fixtures.
 If a backend counterpart is behind, the frontend workstream keeps moving.
+
+**D-034 — Accounts are issued by an Admin. There is no public signup.**
+`POST /auth/signup` was an unauthenticated endpoint that accepted a `role`, so
+anyone reachable by the API could mint themselves an `ADMIN`, or a `CUSTOMER`
+account pointed at a company they had nothing to do with — the portal's whole
+isolation guarantee rests on that link being correct. It is gone, along with the
+`/signup` screen and the login page's "Create one" link. Accounts are created on
+screen 19 (`/admin/users`), where the actor is known, the write is audited, and
+the company link is validated. The cost is that a new user must be added for
+them; for this product that is the correct trade.
+
+**D-035 — A valid token is not a valid session, so every guarded request re-reads
+the account.** `requireAuth` verifies the JWT and then loads the user, enforcing
+the role stored in the database rather than the one the token was minted with. A
+JWT cannot be recalled once issued, so without this an account deactivated on
+screen 19 would keep working until its token expired — which would make the
+Deactivate button a lie — and a demoted user would keep their old rights for the
+rest of the token's life. One indexed lookup per authenticated request is the
+price of being able to revoke access at all. (The alternative, a token blocklist,
+is more moving parts for the same outcome at this scale.)
+
+**D-036 — The first-sign-in password change is an offer, not a wall.**
+An account created on screen 19 carries `mustChangePassword`, because the
+password on it was typed by whoever created the account, not by its holder. Signing
+in routes them to *Choose your password* — with **Skip for now**, which leaves the
+flag set so the offer returns at the next sign-in. It is deliberately not enforced
+server-side: a hard lock would mean a half-provisioned account cannot be looked at
+during a demo, and the flag is the same one a guard would read if that changes.
+The Admin reset path (`PATCH /users/:id` with `password`) re-arms the flag,
+because a reset password is one the holder did not choose either. Seeded demo
+logins are explicitly exempt: their passwords are published in the README, on the
+login screen and in docs/CREDENTIALS.md, so a judge changing one would make the
+published credential wrong.

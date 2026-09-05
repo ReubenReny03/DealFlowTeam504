@@ -67,6 +67,14 @@ export interface AuthSessionDto {
   portalQuotationId?: Id;
 }
 
+/**
+ * @deprecated There is no public signup. `POST /auth/signup` was removed in Phase
+ * E (docs/DECISIONS.md D-034): an unauthenticated endpoint that accepted a `role`
+ * let anyone mint an ADMIN, or a portal account pointed at someone else's
+ * company. Accounts are created by an Admin — use `CreateUserRequest` against
+ * `POST /users`. The type is kept only so nothing breaks at compile time; do not
+ * wire it to a new endpoint.
+ */
 export interface SignupRequest {
   name: string;
   email: string;
@@ -180,6 +188,64 @@ export interface ProductStockDto {
   totalAvailable: number;
   /** The catalogue figure on the product, for the UI to reconcile against the total. */
   quantityOnHand: number;
+}
+
+/* ------------------------------------------------------------------ users (screen 19) */
+
+/**
+ * `POST /users` — the only way an account is created, now that there is no
+ * public signup. `customerId` is required when `role` is CUSTOMER (a portal
+ * login is scoped to exactly one company) and refused for every other role.
+ */
+export interface CreateUserRequest {
+  name: string;
+  email: string;
+  password: string;
+  role: Role;
+  customerId?: Id;
+  active?: boolean;
+  /**
+   * Whether to ask them to pick their own password at first sign-in.
+   * Defaults to **true**: the password on a new account was typed by somebody
+   * else, so the account holder has never chosen it.
+   */
+  mustChangePassword?: boolean;
+}
+
+/** `PATCH /users/:id`. A role change stays within the internal roles. */
+export interface UpdateUserRequest {
+  name?: string;
+  email?: string;
+  role?: Role;
+  /** Move a portal login to a different company. */
+  customerId?: Id;
+  active?: boolean;
+  /**
+   * Admin password reset. No current password is required — an Admin resetting a
+   * forgotten one does not have it. Setting this turns `mustChangePassword` back
+   * on unless it is explicitly passed as false.
+   */
+  password?: string;
+  mustChangePassword?: boolean;
+}
+
+/**
+ * `POST /auth/change-password` — the account holder setting their own password.
+ * Unlike the Admin reset above, this one proves it knows the current password.
+ */
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+/** A row on the Admin Users screen: the account plus the company it belongs to. */
+export interface UserRowDto extends UserDto {
+  /** The company name for a CUSTOMER account; absent for internal users. */
+  customerName?: string;
+}
+
+export interface UserListDto {
+  items: UserRowDto[];
 }
 
 /* ------------------------------------------------------------------ price lists (screen 17) */

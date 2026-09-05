@@ -51,6 +51,8 @@ const userSchema = new Schema(
     role: { type: String, enum: ALL_ROLES, required: true },
     customerId: { type: Schema.Types.ObjectId, ref: 'Customer' },
     active: { type: Boolean, default: true },
+    /** Still on the password an Admin typed for them. Cleared when they set their own. */
+    mustChangePassword: { type: Boolean, default: false },
     /** Rolling average discount % across this rep's recent quotes; feeds the anomaly rule. */
     trailingAvgDiscountPct: { type: Number, default: 0 },
   },

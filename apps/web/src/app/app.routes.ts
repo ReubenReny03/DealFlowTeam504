@@ -18,10 +18,13 @@ export const APP_ROUTES: Routes = [
     title: 'Sign in · DealFlow360',
     loadComponent: () => import('./features/auth/login.page').then((m) => m.LoginPage),
   },
+  // No /signup route: accounts are created by an Admin on /admin/users, never
+  // self-service. The API has no POST /auth/signup either.
   {
-    path: 'signup',
-    title: 'Create an account · DealFlow360',
-    loadComponent: () => import('./features/auth/signup.page').then((m) => m.SignupPage),
+    path: 'change-password',
+    title: 'Change your password · DealFlow360',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/auth/change-password.page').then((m) => m.ChangePasswordPage),
   },
 
   /* ------------------------------------------------- the internal workspace */
@@ -63,6 +66,8 @@ export const APP_ROUTES: Routes = [
       { path: 'warehouses', title: 'Warehouses · DealFlow360', loadComponent: () => import('./features/admin/warehouses.page').then((m) => m.WarehousesPage) },
       { path: 'plans', title: 'Subscription Plans · DealFlow360', loadComponent: () => import('./features/admin/plans.page').then((m) => m.PlansPage) },
       { path: 'config', title: 'Discount Tiers & Approvals · DealFlow360', loadComponent: () => import('./features/admin/config.page').then((m) => m.ConfigPage) },
+      // Account management is Admin-only, a step above the rest of the back-end.
+      { path: 'users', title: 'Users · DealFlow360', canActivate: [roleGuard([Role.ADMIN])], loadComponent: () => import('./features/admin/users.page').then((m) => m.UsersPage) },
     ],
   },
 

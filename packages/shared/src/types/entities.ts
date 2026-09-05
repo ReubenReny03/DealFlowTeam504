@@ -51,6 +51,13 @@ export interface UserDto extends Timestamped {
   /** Present only for Role.CUSTOMER — the company this portal user belongs to. */
   customerId?: Id;
   active: boolean;
+  /**
+   * True while the account is still on the password an Admin typed for it. Set
+   * when the account is created, cleared the moment the user sets their own. The
+   * sign-in flow offers them the chance to change it; skipping leaves the flag
+   * set, so they are asked again next time.
+   */
+  mustChangePassword: boolean;
   /** Route the UI sends this user to immediately after login. */
   landingRoute: string;
 }
