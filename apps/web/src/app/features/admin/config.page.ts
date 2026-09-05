@@ -44,6 +44,11 @@ import { ErrorStateComponent, LoadingComponent } from '../../shared/ui';
               </label>
             }
           </div>
+          @if (tierOrderIssue(); as issue) {
+            <p class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+              ⚠ {{ issue }}
+            </p>
+          }
         </section>
 
         <section class="df-card p-5">
@@ -126,10 +131,13 @@ import { ErrorStateComponent, LoadingComponent } from '../../shared/ui';
             <input class="df-input" [(ngModel)]="reason" placeholder="e.g. Q4 pricing policy — Services discretion raised to 20%" />
           </label>
           <div class="mt-4 flex items-center gap-3">
-            <button type="button" class="df-btn-primary" [disabled]="store.saving() || !reason.trim()" (click)="save()">
+            <button type="button" class="df-btn-primary" [disabled]="store.saving() || !reason.trim() || !!tierOrderIssue()" (click)="save()">
               {{ store.saving() ? 'Saving…' : 'Save configuration' }}
             </button>
-            <span class="text-xs text-slate-400">Saving re-evaluates every open quotation immediately.</span>
+            <span class="text-xs text-slate-400">
+              @if (tierOrderIssue()) { Fix the tier ordering above before saving. }
+              @else { Saving re-evaluates every open quotation immediately. }
+            </span>
           </div>
         </section>
 
@@ -178,6 +186,8 @@ export class ConfigPage implements OnInit {
   protected readonly tiers = Object.values(CustomerTier);
   protected readonly categories = Object.values(ProductCategory);
   protected readonly empty = EMPTY_STATES['config'];
+  /** Ascending order of discretion — a higher tier should never be given less room than a lower one. */
+  private readonly tierOrder: CustomerTier[] = [CustomerTier.BRONZE, CustomerTier.SILVER, CustomerTier.GOLD];
 
   tierCeilings: Record<string, number> = {};
   categoryCeilings: Record<string, number> = {};
@@ -201,6 +211,20 @@ export class ConfigPage implements OnInit {
 
   pretty(value: string): string {
     return value.charAt(0) + value.slice(1).toLowerCase();
+  }
+
+  /** UI-only guard: a higher tier's ceiling dropping below a lower tier's makes the governance table read backwards. */
+  tierOrderIssue(): string | null {
+    for (let i = 1; i < this.tierOrder.length; i++) {
+      const prev = this.tierOrder[i - 1];
+      const curr = this.tierOrder[i];
+      const prevCeiling = this.tierCeilings[prev] ?? 0;
+      const currCeiling = this.tierCeilings[curr] ?? 0;
+      if (currCeiling < prevCeiling) {
+        return `${this.pretty(curr)}'s ceiling (${currCeiling}%) is lower than ${this.pretty(prev)}'s (${prevCeiling}%) — a higher tier should never have less discretion than a lower one.`;
+      }
+    }
+    return null;
   }
 
   async save(): Promise<void> {

@@ -2,8 +2,8 @@
  * APPEND-ONLY ROUTE TABLE.
  *
  * Each feature is lazy-loaded. To add a screen, append ONE entry to the right
- * children array — never restructure this file. Route ownership mirrors the
- * workstreams in docs/AGENT_*.md, so two agents never touch the same block.
+ * children array — never restructure this file. Routes are grouped by
+ * feature area below, matching the module boundaries in `docs/`.
  */
 import { Role } from '@dealflow/shared';
 import type { Routes } from '@angular/router';
@@ -12,7 +12,7 @@ import { authGuard, internalGuard, portalGuard, roleGuard } from './core/guards/
 export const APP_ROUTES: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'login' },
 
-  /* ---------------------------------------------------------- screen 1 (A) */
+  /* --------------------------------------------------- screen 1: sign in */
   {
     path: 'login',
     title: 'Sign in · DealFlow360',
@@ -24,21 +24,21 @@ export const APP_ROUTES: Routes = [
     loadComponent: () => import('./features/auth/signup.page').then((m) => m.SignupPage),
   },
 
-  /* ------------------------------------------- the internal workspace (B/C/D) */
+  /* ------------------------------------------------- the internal workspace */
   {
     path: 'app',
     canActivate: [internalGuard],
     loadComponent: () => import('./layouts/internal-shell.component').then((m) => m.InternalShellComponent),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
-      // --- Agent B ---
+      // --- quotations ---
       { path: 'dashboard', title: 'Dashboard · DealFlow360', loadComponent: () => import('./features/dashboard/dashboard.page').then((m) => m.DashboardPage) },
       { path: 'quotations', title: 'Quotations · DealFlow360', loadComponent: () => import('./features/quotations/quotation-list.page').then((m) => m.QuotationListPage) },
       { path: 'quotations/:id', title: 'Quotation · DealFlow360', loadComponent: () => import('./features/quotations/quotation-detail.page').then((m) => m.QuotationDetailPage) },
-      // --- Agent C ---
+      // --- approvals ---
       { path: 'approvals', title: 'Approvals · DealFlow360', canActivate: [roleGuard([Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE])], loadComponent: () => import('./features/approvals/approval-list.page').then((m) => m.ApprovalListPage) },
       { path: 'approvals/:id', title: 'Approval · DealFlow360', canActivate: [roleGuard([Role.ADMIN, Role.SALES_MANAGER, Role.FINANCE])], loadComponent: () => import('./features/approvals/approval-detail.page').then((m) => m.ApprovalDetailPage) },
-      // --- Agent D ---
+      // --- fulfillment, billing, deal health, reporting ---
       { path: 'fulfillment', title: 'Fulfillment · DealFlow360', loadComponent: () => import('./features/fulfillment/fulfillment-list.page').then((m) => m.FulfillmentListPage) },
       { path: 'fulfillment/:id', title: 'Fulfillment · DealFlow360', loadComponent: () => import('./features/fulfillment/fulfillment-detail.page').then((m) => m.FulfillmentDetailPage) },
       { path: 'subscriptions', title: 'Subscriptions · DealFlow360', loadComponent: () => import('./features/subscriptions/subscription-list.page').then((m) => m.SubscriptionListPage) },
@@ -50,7 +50,7 @@ export const APP_ROUTES: Routes = [
     ],
   },
 
-  /* ------------------------------------------------- the back-end area (A) */
+  /* ------------------------------------------------------ the admin area */
   {
     path: 'admin',
     canActivate: [roleGuard([Role.ADMIN, Role.SALES_MANAGER])],
@@ -66,7 +66,7 @@ export const APP_ROUTES: Routes = [
     ],
   },
 
-  /* ------------------------------------------------ the customer portal (C) */
+  /* -------------------------------------------------- the customer portal */
   {
     path: 'portal',
     canActivate: [portalGuard],

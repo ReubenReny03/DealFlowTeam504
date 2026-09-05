@@ -131,7 +131,7 @@ export class QuotationBuilderStore {
         await firstValueFrom(this.api.get<UpsellSuggestionDto[]>('/upsell/suggestions', { quotationId })),
       );
     } catch {
-      // Agent B has not landed the endpoint yet; the panel shows its own hint.
+      // No suggestions for this quote (e.g. every product is already on it) — the panel shows its own empty hint.
       this.suggestions.set([]);
     }
   }

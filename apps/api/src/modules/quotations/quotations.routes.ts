@@ -3,7 +3,7 @@
  * The read side (board, dashboard, list, detail) and the whole write side —
  * line management with optimistic concurrency, the live preview, and
  * `POST /:id/submit`, which computes the blended risk and either
- * auto-approves the quotation or opens the approval chain — are Agent B's.
+ * auto-approves the quotation or opens the approval chain.
  */
 import { Router } from 'express';
 import { Types } from 'mongoose';

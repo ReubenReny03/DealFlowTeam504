@@ -36,7 +36,7 @@ export const configRouter = Router();
 mountModuleHealth(configRouter, {
   module: 'config', owner: 'A', screens: [18],
   implemented: ['GET /', 'PUT / (re-evaluates every open quotation)'],
-  todo: ['UI-side validation that a tier ceiling is never below a category ceiling (Agent A)'],
+  todo: [],
 });
 
 configRouter.get(

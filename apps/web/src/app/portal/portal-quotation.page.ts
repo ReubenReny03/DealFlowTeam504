@@ -178,10 +178,7 @@ export class PortalQuotationPage implements OnInit {
           : 'Your account manager can approve these terms directly.',
       );
     } catch {
-      this.toast.error(
-        'Not wired up yet',
-        'POST /portal/q/:number/counter — with the automatic re-approval loop — is Agent C, task C-6 in docs/AGENT_C.md.',
-      );
+      /* the interceptor already toasted the reason */
     }
   }
 
@@ -190,7 +187,7 @@ export class PortalQuotationPage implements OnInit {
       await this.store.confirm();
       this.toast.success('Confirmed', 'Your order is being prepared. You will get an invoice once it ships.');
     } catch {
-      this.toast.error('Not wired up yet', 'POST /portal/q/:number/confirm is Agent C, task C-7 in docs/AGENT_C.md.');
+      /* the interceptor already toasted the reason */
     }
   }
 }

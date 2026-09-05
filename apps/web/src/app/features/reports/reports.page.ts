@@ -1,10 +1,13 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApprovalStatus, ProductCategory, type UserDto } from '@dealflow/shared';
+import { environment } from '../../../environments/environment';
 import { ApiService } from '../../core/api/api.service';
 import { ReportingStore } from '../../core/state/feature.stores';
 import { ToastStore } from '../../core/state/toast.store';
+import { downloadBlob } from '../../shared/download';
 import { ErrorStateComponent, KpiTileComponent, LoadingComponent, MoneyPipe } from '../../shared/ui';
 import { signal } from '@angular/core';
 
@@ -120,6 +123,7 @@ import { signal } from '@angular/core';
 export class ReportsPage implements OnInit {
   protected readonly store = inject(ReportingStore);
   private readonly api = inject(ApiService);
+  private readonly http = inject(HttpClient);
   private readonly toast = inject(ToastStore);
 
   protected readonly reps = signal<UserDto[]>([]);
@@ -148,7 +152,21 @@ export class ReportsPage implements OnInit {
     });
   }
 
-  exportAs(kind: 'pdf' | 'xls'): void {
-    this.toast.info(`Export ${kind.toUpperCase()}`, 'Export is Agent D, task D-14 (P2 in docs/FEATURE_PRIORITY.md). CSV lands first.');
+  async exportAs(kind: 'pdf' | 'xls'): Promise<void> {
+    const params = new URLSearchParams({
+      period: this.period,
+      ...(this.repId ? { repId: this.repId } : {}),
+      ...(this.approvalStatus ? { approvalStatus: this.approvalStatus } : {}),
+      ...(this.category ? { category: this.category } : {}),
+    });
+    const isPdf = kind === 'pdf';
+    const path = isPdf ? 'export.pdf' : 'export.xlsx';
+    const ext = isPdf ? 'pdf' : 'xlsx';
+    try {
+      const blob = await firstValueFrom(this.http.get(`${environment.apiBase}/reporting/${path}?${params}`, { responseType: 'blob' }));
+      downloadBlob(blob, `dealflow360-reporting.${ext}`);
+    } catch {
+      this.toast.error(`Could not export ${kind.toUpperCase()}`, 'Please try again.');
+    }
   }
 }

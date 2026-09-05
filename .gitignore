@@ -12,7 +12,7 @@ packages/shared/dist/
 storage/exports/
 storage/uploads/
 storage/logs/
-
+CLAUDE.md
 # one-off local helper, not part of the project
 script.txt
 

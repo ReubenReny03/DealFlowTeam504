@@ -234,11 +234,7 @@ export class ApprovalDetailPage implements OnInit {
       await this.store.decide(this.id(), action, reason);
       this.toast.success('Recorded', `${this.dialogConfirm()} — written to the audit trail.`);
     } catch {
-      // AGENT C: POST /approvals/:id/{approve,return,reject} is task C-3.
-      this.toast.error(
-        'Not wired up yet',
-        'The approval state machine is Agent C, task C-3 in docs/AGENT_C.md. The queue, the flagged-lines table and the audit trail above are already live.',
-      );
+      /* the interceptor already toasted the reason (e.g. a 403 when you are not the active step's role) */
     }
   }
 }

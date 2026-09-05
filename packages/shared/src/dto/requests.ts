@@ -113,6 +113,19 @@ export interface ConfigChangeImpactDto {
   }[];
 }
 
+/* ------------------------------------------------------------------ customers */
+
+export interface UpsertCustomerRequest {
+  name: string;
+  tier: CustomerTier;
+  currency?: Currency;
+  contactName?: string;
+  contactEmail?: string;
+  /** The owning sales rep. Required on create; may be reassigned on update. */
+  ownerId?: Id;
+  active?: boolean;
+}
+
 /* ------------------------------------------------------------------ products */
 
 export interface UpsertProductRequest {

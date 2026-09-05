@@ -192,6 +192,7 @@ export const AlertSeverity = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH' } as c
 export type AlertSeverity = (typeof AlertSeverity)[keyof typeof AlertSeverity];
 
 export const AuditEntity = {
+  CUSTOMER: 'CUSTOMER',
   QUOTATION: 'QUOTATION',
   APPROVAL: 'APPROVAL',
   ORDER: 'ORDER',

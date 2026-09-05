@@ -5,7 +5,8 @@
  * are drawn from the same seed data the API returns, so a screen developed
  * against mocks looks identical once the real endpoint lands.
  *
- * Owned by Agent A; each agent may append their own module's fixtures.
+ * Add fixtures here as new modules need them; keep each key scoped to one
+ * module's request pattern so entries stay easy to find and remove.
  */
 export const MOCK_RESPONSES: Record<string, unknown> = {
   '^/auth/demo-accounts$': [

@@ -49,7 +49,7 @@ export class PortalStore {
     }
   }
 
-  /** AGENT C: POST /portal/q/:number/comment — a question, with no counter attached. */
+  /** A question, with no counter attached — never re-enters approval. */
   async comment(lineId: string | undefined, comment: string): Promise<void> {
     const number = this.quotation()?.number;
     if (!number) return;
@@ -63,7 +63,6 @@ export class PortalStore {
   }
 
   /**
-   * AGENT C: POST /portal/q/:number/counter.
    * On the server this recomputes the blended risk and, if the new terms breach
    * the thresholds, forces the quotation back to PENDING_APPROVAL with the audit
    * reason RE_ENTERED_FROM_NEGOTIATION. That is the demo's biggest moment.
@@ -80,7 +79,7 @@ export class PortalStore {
     }
   }
 
-  /** AGENT C: POST /portal/q/:number/confirm — then Agent D's order creation. */
+  /** Confirms the quotation as-is, then triggers order creation and the warehouse split. */
   async confirm(): Promise<void> {
     const number = this.quotation()!.number;
     this.submitting.set(true);

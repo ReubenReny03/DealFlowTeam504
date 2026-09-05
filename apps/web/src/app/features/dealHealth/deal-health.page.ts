@@ -101,7 +101,7 @@ export class DealHealthPage implements OnInit {
       await this.store.act(alert.id, action);
       this.toast.success(action === 'nudge' ? 'Nudge sent' : 'Escalated', `${alert.ownerName} has been notified.`);
     } catch {
-      this.toast.error('Not wired up yet', `POST /deal-health/:id/${action} is Agent D, task D-13 in docs/AGENT_D.md.`);
+      /* the interceptor already toasted the reason (e.g. an already-resolved alert) */
     }
   }
 }

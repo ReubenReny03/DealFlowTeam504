@@ -1,11 +1,25 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { FulfillmentStore } from '../../core/state/feature.stores';
 import { ToastStore } from '../../core/state/toast.store';
 import {
-  ConfirmDialogComponent, ErrorStateComponent, LoadingComponent, MoneyPipe,
+  ErrorStateComponent, LoadingComponent, ModalComponent, MoneyPipe,
   ShortDatePipe, StatusChipComponent,
 } from '../../shared/ui';
+
+interface OverrideRow {
+  warehouseId: string;
+  qty: number;
+}
+
+interface OverrideLine {
+  lineId: string;
+  productId: string;
+  productName: string;
+  totalQty: number;
+  rows: OverrideRow[];
+}
 
 /**
  * SCREEN 8 — Fulfillment Detail.
@@ -16,7 +30,7 @@ import {
 @Component({
   selector: 'df-fulfillment-detail',
   standalone: true,
-  imports: [RouterLink, MoneyPipe, ShortDatePipe, StatusChipComponent, ConfirmDialogComponent, LoadingComponent, ErrorStateComponent],
+  imports: [RouterLink, FormsModule, MoneyPipe, ShortDatePipe, StatusChipComponent, ModalComponent, LoadingComponent, ErrorStateComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (store.loading()) {
@@ -36,7 +50,7 @@ import {
         </div>
         <div class="flex gap-2">
           <button type="button" class="df-btn-primary" (click)="accept()">Accept Suggested Split</button>
-          <button type="button" class="df-btn-ghost" (click)="overrideOpen.set(true)">Manual Override</button>
+          <button type="button" class="df-btn-ghost" (click)="openOverride()">Manual Override</button>
         </div>
       </div>
 
@@ -129,16 +143,60 @@ import {
         </aside>
       </div>
 
-      <df-confirm-dialog
-        [open]="overrideOpen()"
-        title="Override the suggested split?"
-        message="A manual allocation is validated against live availability and is written to the audit trail with your reason. Agent D wires the allocation editor (docs/AGENT_D.md, task D-4)."
-        confirmLabel="Record override"
-        tone="warn"
-        reasonLabel="Why are you overriding the suggestion?"
-        (confirmed)="override($event)"
-        (cancel)="overrideOpen.set(false)"
-      />
+      <df-modal [open]="overrideOpen()" title="Manual Override" subtitle="Reassign this order across warehouses" (close)="overrideOpen.set(false)">
+        <div class="max-h-[60vh] space-y-4 overflow-y-auto">
+          @for (line of overrideLines; track line.lineId) {
+            <div class="rounded-lg border border-slate-200 p-3">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-sm font-medium text-slate-800">{{ line.productName }}</span>
+                <span
+                  class="text-xs font-mono"
+                  [class.text-emerald-600]="allocatedQty(line) === line.totalQty"
+                  [class.text-rose-600]="allocatedQty(line) !== line.totalQty"
+                >
+                  {{ allocatedQty(line) }} / {{ line.totalQty }} allocated
+                </span>
+              </div>
+              <div class="mt-2 space-y-2">
+                @for (row of line.rows; track $index) {
+                  <div class="flex items-center gap-2">
+                    <select class="df-input" [(ngModel)]="row.warehouseId" [attr.aria-label]="'Warehouse for ' + line.productName">
+                      @for (w of warehouses(); track w.id) { <option [value]="w.id">{{ w.name }}</option> }
+                    </select>
+                    <input
+                      class="df-input w-24 text-right"
+                      type="number"
+                      min="0"
+                      [(ngModel)]="row.qty"
+                      [attr.aria-label]="'Quantity for ' + line.productName"
+                    />
+                    <button type="button" class="df-btn-ghost !px-2" (click)="removeRow(line, $index)" aria-label="Remove this row">✕</button>
+                  </div>
+                }
+                <button type="button" class="text-xs font-medium text-brand-700 hover:underline" (click)="addRow(line)">
+                  + Add warehouse
+                </button>
+              </div>
+            </div>
+          } @empty {
+            <p class="text-sm text-slate-400">Nothing to allocate — this order has no stockable lines.</p>
+          }
+
+          <label class="block">
+            <span class="df-label">Why are you overriding the suggestion?</span>
+            <input class="df-input" [(ngModel)]="overrideReason" placeholder="e.g. Reserve for a VIP account from East Depot" />
+          </label>
+          <p class="text-xs leading-relaxed text-slate-500">
+            Any quantity left unallocated for a line goes on backorder, the same as the suggested split. The allocation is validated
+            against live availability and written to the audit trail with your reason.
+          </p>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="df-btn-ghost" (click)="overrideOpen.set(false)">Cancel</button>
+            <button type="button" class="df-btn-warn" [disabled]="!overrideReason.trim()" (click)="submitOverride()">Record override</button>
+          </div>
+        </div>
+      </df-modal>
       }
     }
   `,
@@ -147,9 +205,22 @@ export class FulfillmentDetailPage implements OnInit {
   protected readonly store = inject(FulfillmentStore);
   private readonly toast = inject(ToastStore);
   readonly id = input<string>('');
-  protected readonly overrideOpen = signal(false);
 
-  ngOnInit(): void { void this.store.loadOne(this.id()); }
+  protected readonly overrideOpen = signal(false);
+  protected overrideLines: OverrideLine[] = [];
+  protected overrideReason = '';
+
+  /** Every warehouse the live stock table knows about, for the row selects. */
+  protected readonly warehouses = computed(() => {
+    const byId = new Map<string, string>();
+    for (const s of this.store.stock()) byId.set(s.warehouseId, s.warehouseName);
+    return [...byId.entries()].map(([id, name]) => ({ id, name }));
+  });
+
+  ngOnInit(): void {
+    void this.store.loadOne(this.id());
+    void this.store.load();
+  }
   reload(): void { void this.store.loadOne(this.id()); }
 
   async accept(): Promise<void> {
@@ -157,21 +228,76 @@ export class FulfillmentDetailPage implements OnInit {
       await this.store.acceptSplit(this.id());
       this.toast.success('Split accepted', 'Stock has been reserved against these warehouses.');
     } catch {
-      this.toast.error('Not wired up yet', 'POST /fulfillment/:id/accept is Agent D, task D-3 in docs/AGENT_D.md.');
+      /* the interceptor already toasted the reason (e.g. 409 INSUFFICIENT_STOCK) */
     }
   }
 
-  async override(reason: string): Promise<void> {
+  /** Seeds the editor from the CURRENT split — allocated lines pre-filled, backordered lines start unassigned. */
+  openOverride(): void {
+    const f = this.store.current();
+    if (!f) return;
+    const byLine = new Map<string, OverrideLine>();
+    for (const a of f.allocations) {
+      for (const l of a.lines) {
+        const entry = byLine.get(l.lineId) ?? { lineId: l.lineId, productId: l.productId, productName: l.productName, totalQty: 0, rows: [] };
+        entry.totalQty += l.qty;
+        entry.rows.push({ warehouseId: a.warehouseId, qty: l.qty });
+        byLine.set(l.lineId, entry);
+      }
+    }
+    for (const b of f.backorders) {
+      const entry = byLine.get(b.lineId) ?? { lineId: b.lineId, productId: b.productId, productName: b.productName, totalQty: 0, rows: [] };
+      entry.totalQty += b.qty;
+      byLine.set(b.lineId, entry);
+    }
+    this.overrideLines = [...byLine.values()];
+    this.overrideReason = '';
+    this.overrideOpen.set(true);
+  }
+
+  allocatedQty(line: OverrideLine): number {
+    return line.rows.reduce((a, r) => a + (r.qty || 0), 0);
+  }
+
+  addRow(line: OverrideLine): void {
+    line.rows.push({ warehouseId: this.warehouses()[0]?.id ?? '', qty: 0 });
+  }
+
+  removeRow(line: OverrideLine, index: number): void {
+    line.rows.splice(index, 1);
+  }
+
+  async submitOverride(): Promise<void> {
+    const allocations = groupRowsByWarehouse(this.overrideLines);
     this.overrideOpen.set(false);
     try {
-      await this.store.overrideSplit(this.id(), this.store.current()?.allocations ?? [], reason);
+      await this.store.overrideSplit(this.id(), allocations, this.overrideReason.trim());
       this.toast.success('Override recorded', 'Written to the audit trail with your reason.');
     } catch {
-      this.toast.error('Not wired up yet', 'POST /fulfillment/:id/override is Agent D, task D-4 in docs/AGENT_D.md.');
+      /* the interceptor already toasted the reason (e.g. 409 INSUFFICIENT_STOCK) */
     }
   }
 
-  consolidate(): void {
-    this.toast.info('Consolidation', 'Agent D wires this to the backorder consolidation endpoint (task D-5).');
+  async consolidate(): Promise<void> {
+    try {
+      await this.store.consolidate(this.id());
+      this.toast.success('Consolidated', 'The remaining backorder shipped as one consolidated shipment.');
+    } catch {
+      /* the interceptor already toasted the reason */
+    }
   }
+}
+
+/** The editor works per-line; the API takes allocations grouped per-warehouse. */
+function groupRowsByWarehouse(lines: OverrideLine[]): { warehouseId: string; lines: { lineId: string; qty: number }[] }[] {
+  const byWarehouse = new Map<string, { lineId: string; qty: number }[]>();
+  for (const line of lines) {
+    for (const row of line.rows) {
+      if (!row.warehouseId || !row.qty || row.qty <= 0) continue;
+      const rows = byWarehouse.get(row.warehouseId) ?? [];
+      rows.push({ lineId: line.lineId, qty: row.qty });
+      byWarehouse.set(row.warehouseId, rows);
+    }
+  }
+  return [...byWarehouse.entries()].map(([warehouseId, lines]) => ({ warehouseId, lines }));
 }

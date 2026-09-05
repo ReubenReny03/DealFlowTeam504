@@ -316,20 +316,30 @@ async function main(): Promise<void> {
   /* ---- 12. Changing a ceiling changes behaviour live ---- */
   await step(12, 'Changing a discount ceiling re-evaluates open quotations immediately', 'A', async () => {
     const before = await api('GET', '/quotations?q=Q-1042', { token: tokens[Role.ADMIN] });
-    const beforeScore = before.body.data.find((q: any) => q.number === 'Q-1042').risk.riskScore;
+    const beforeQuote = before.body.data.find((q: any) => q.number === 'Q-1042');
+    const beforeScore = beforeQuote.risk.riskScore;
+    // Step 8 (the portal counter-offer loop) may already have raised a line's own
+    // discount above its seeded value, so the ceiling this test raises to must
+    // cover whatever Q-1042's CURRENT terms are — not the value it happened to
+    // carry when this test was first written — to prove the point regardless of
+    // run order: a live ceiling change re-evaluates every open quotation.
+    const coveringCeiling = Math.max(20, ...beforeQuote.lines.map((l: any) => l.discountPct));
 
     const res = await api('PUT', '/config', {
       token: tokens[Role.ADMIN],
       body: {
-        tierCeilings: { GOLD: 20 },
-        categoryCeilings: { SERVICES: 20 },
+        tierCeilings: { GOLD: coveringCeiling },
+        categoryCeilings: { SERVICES: coveringCeiling },
         reason: 'Smoke test: prove the risk engine is configuration-driven, not hardcoded',
       },
     });
     assert(res.status === 200, `config update failed: ${res.body.error?.message}`);
     const impact = res.body.data.reevaluated.find((r: any) => r.quotationNumber === 'Q-1042');
     assert(impact, 'Q-1042 should have been re-evaluated');
-    assert(impact.previousScore === 33 && impact.newScore === 0, `expected 33 -> 0, got ${impact.previousScore} -> ${impact.newScore}`);
+    assert(
+      impact.previousScore === beforeScore && impact.newScore === 0,
+      `expected ${beforeScore} -> 0, got ${impact.previousScore} -> ${impact.newScore}`,
+    );
     assert(impact.autoApproved === true, 'Q-1042 should have auto-approved once it was inside its limits');
 
     // Put it back, so the demo database is left exactly as it was found.

@@ -1,9 +1,13 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { ORDER_STEPPER, PaymentMethod } from '@dealflow/shared';
+import { environment } from '../../../environments/environment';
 import { BillingStore } from '../../core/state/feature.stores';
 import { ToastStore } from '../../core/state/toast.store';
+import { downloadBlob } from '../../shared/download';
 import {
   ErrorStateComponent, LoadingComponent, ModalComponent, MoneyPipe,
   ShortDatePipe, Step, StepperComponent, StatusChipComponent,
@@ -154,6 +158,7 @@ import {
 export class InvoiceDetailPage implements OnInit {
   protected readonly store = inject(BillingStore);
   private readonly toast = inject(ToastStore);
+  private readonly http = inject(HttpClient);
   readonly id = input<string>('');
 
   protected readonly paymentOpen = signal(false);
@@ -183,11 +188,20 @@ export class InvoiceDetailPage implements OnInit {
       await this.store.recordPayment(this.id(), { amount: this.amount, method: this.method, reference: this.reference });
       this.toast.success('Payment recorded', 'The invoice and the order stepper have moved on.');
     } catch {
-      this.toast.error('Not wired up yet', 'POST /invoices/:id/payments is Agent D, task D-10 in docs/AGENT_D.md.');
+      /* the interceptor already toasted the reason (e.g. a payment exceeding the outstanding balance) */
     }
   }
 
-  download(): void {
-    this.toast.info('Download Summary', 'CSV export is Agent D, task D-12 (P2 in docs/FEATURE_PRIORITY.md).');
+  async download(): Promise<void> {
+    const invoice = this.store.invoice()?.invoice;
+    if (!invoice) return;
+    try {
+      const blob = await firstValueFrom(
+        this.http.get(`${environment.apiBase}/invoices/${invoice.id}/summary.csv`, { responseType: 'blob' }),
+      );
+      downloadBlob(blob, `${invoice.number}-summary.csv`);
+    } catch {
+      this.toast.error('Could not download the summary', 'Please try again.');
+    }
   }
 }

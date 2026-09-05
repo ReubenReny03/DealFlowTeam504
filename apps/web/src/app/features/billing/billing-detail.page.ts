@@ -140,12 +140,22 @@ export class BillingDetailPage implements OnInit {
   ngOnInit(): void { void this.store.loadBillingDetail(this.id()); }
   reload(): void { void this.store.loadBillingDetail(this.id()); }
 
-  modify(_reason: string): void {
+  async modify(reason: string): Promise<void> {
     this.modifyOpen.set(false);
-    this.toast.info('Not wired up yet', 'POST /subscriptions/:id/modify with proration is Agent D, task D-8 in docs/AGENT_D.md.');
+    try {
+      await this.store.modifySubscription(this.id(), { reason });
+      this.toast.success('Subscription modified', 'The proration was applied and the schedule updated.');
+    } catch {
+      /* the interceptor already toasted the reason */
+    }
   }
-  cancelSub(_reason: string): void {
+  async cancelSub(reason: string): Promise<void> {
     this.cancelOpen.set(false);
-    this.toast.info('Not wired up yet', 'POST /subscriptions/:id/cancel with the credit note is Agent D, task D-9 in docs/AGENT_D.md.');
+    try {
+      await this.store.cancelSubscription(this.id(), { reason });
+      this.toast.success('Subscription cancelled', 'The current period was settled under its cancellation rule.');
+    } catch {
+      /* the interceptor already toasted the reason */
+    }
   }
 }

@@ -81,8 +81,8 @@ export class ApprovalStore {
   }
 
   /**
-   * AGENT C: wire these to POST /approvals/:id/{approve,return,reject}.
-   * Each must send a reason and refresh `current()` from the response.
+   * `POST /approvals/:id/{approve,return,reject}`.
+   * Each sends a reason and refreshes `current()` from the response.
    */
   async decide(id: string, action: 'approve' | 'return' | 'reject', reason: string): Promise<ApprovalDto> {
     const updated = await firstValueFrom(this.api.post<ApprovalDto>(`/approvals/${id}/${action}`, { reason }));
@@ -129,13 +129,16 @@ export class FulfillmentStore {
     }
   }
 
-  /** AGENT D: POST /fulfillment/:id/accept and /override. */
   async acceptSplit(id: string): Promise<void> {
     await firstValueFrom(this.api.post(`/fulfillment/${id}/accept`, {}));
     await this.loadOne(id);
   }
   async overrideSplit(id: string, allocations: unknown, reason: string): Promise<void> {
     await firstValueFrom(this.api.post(`/fulfillment/${id}/override`, { allocations, reason }));
+    await this.loadOne(id);
+  }
+  async consolidate(id: string): Promise<void> {
+    await firstValueFrom(this.api.post(`/fulfillment/${id}/consolidate`, {}));
     await this.loadOne(id);
   }
 }
@@ -178,10 +181,19 @@ export class BillingStore {
     finally { this.loading.set(false); }
   }
 
-  /** AGENT D: POST /invoices/:id/payments, /subscriptions/:id/modify, /cancel. */
   async recordPayment(invoiceId: string, body: unknown): Promise<void> {
     await firstValueFrom(this.api.post(`/invoices/${invoiceId}/payments`, body));
     await this.loadInvoice(invoiceId);
+  }
+
+  async modifySubscription(subscriptionId: string, body: unknown): Promise<void> {
+    await firstValueFrom(this.api.post(`/subscriptions/${subscriptionId}/modify`, body));
+    await this.loadBillingDetail(subscriptionId);
+  }
+
+  async cancelSubscription(subscriptionId: string, body: unknown): Promise<void> {
+    await firstValueFrom(this.api.post(`/subscriptions/${subscriptionId}/cancel`, body));
+    await this.loadBillingDetail(subscriptionId);
   }
 }
 
@@ -200,7 +212,7 @@ export class DealHealthStore {
     finally { this.loading.set(false); }
   }
 
-  /** AGENT D: POST /deal-health/:id/{nudge,escalate}. */
+  /** `POST /deal-health/:id/{nudge,escalate}`. */
   async act(alertId: string, action: 'nudge' | 'escalate', note?: string): Promise<void> {
     await firstValueFrom(this.api.post(`/deal-health/${alertId}/${action}`, { note }));
     await this.load();

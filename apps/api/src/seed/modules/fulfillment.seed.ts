@@ -107,7 +107,8 @@ export async function seedOrdersAndFulfillment(ctx: SeedContext): Promise<void> 
         'Main Warehouse could cover every line in full, so a single shipment was used.',
         'One shipment always beats two, and Main Warehouse has the lowest shipping cost weight (1).',
       ],
-      overridden: false,
+      // Shipped orders' allocations are, by definition, already committed against stock.
+      reserved: true, overridden: false,
       createdAt: ctx.daysAgo(30), updatedAt: ctx.daysAgo(22),
     },
     {
@@ -120,7 +121,12 @@ export async function seedOrdersAndFulfillment(ctx: SeedContext): Promise<void> 
       })),
       backorders: zenithPlan.backorders,
       totalShipments: zenithPlan.totalShipments, totalCost: zenithPlan.totalCost,
-      rationale: zenithPlan.rationale, overridden: false,
+      rationale: zenithPlan.rationale,
+      // The reservations for the allocated portion are written back to stock
+      // below, exactly as `POST /fulfillment/:id/accept` would — so this
+      // fulfillment must be flagged `reserved` too, or a later override
+      // wouldn't know to release them first before re-allocating.
+      reserved: true, overridden: false,
       createdAt: ctx.daysAgo(8), updatedAt: ctx.daysAgo(8),
     },
     {
@@ -137,7 +143,7 @@ export async function seedOrdersAndFulfillment(ctx: SeedContext): Promise<void> 
       ],
       backorders: [], totalShipments: 1, totalCost: 4500,
       rationale: ['Main Warehouse could cover every line in full, so a single shipment was used.'],
-      overridden: false,
+      reserved: true, overridden: false,
       createdAt: ctx.daysAgo(28), updatedAt: ctx.daysAgo(20),
     },
   ]);

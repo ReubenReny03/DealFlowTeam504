@@ -541,6 +541,8 @@ const fulfillmentSchema = new Schema(
     totalShipments: { type: Number, default: 0 },
     totalCost: MONEY,
     rationale: [String],
+    /** True once the current allocations are actually reserved against stock (post accept/override), so a later replan or override knows whether to release them first. */
+    reserved: { type: Boolean, default: false },
     overridden: { type: Boolean, default: false },
     overriddenBy: String,
     overrideReason: String,
