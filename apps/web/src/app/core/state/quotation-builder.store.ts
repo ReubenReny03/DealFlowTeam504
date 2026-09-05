@@ -1,0 +1,208 @@
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import {
+  calculateBlendedRisk,
+  computeLinePricing,
+  computeMargin,
+  computeQuoteTotals,
+  CustomerTier,
+  isAutoApproved,
+  type ApprovalChainConfigDto,
+  type LinePricingInput,
+  type PricedLine,
+  type ProductDto,
+  type QuotationDto,
+  type RiskConfig,
+  type UpsellSuggestionDto,
+} from '@dealflow/shared';
+import { ApiService } from '../api/api.service';
+
+/**
+ * SCREEN 4's BRAIN.
+ *
+ * Every total, the margin indicator, the per-line OK / OVER (+Npt) status and
+ * the blended risk preview are `computed()` signals recalculated SYNCHRONOUSLY
+ * on every quantity, discount or upsell change — no server round-trip, so the
+ * numbers move the instant the rep tabs out of a field.
+ *
+ * They are computed by the SAME pure functions the API uses on save
+ * (`computeLinePricing`, `computeQuoteTotals`, `calculateBlendedRisk` from
+ * @dealflow/shared), which is why the optimistic preview can never disagree
+ * with what the server ends up storing.
+ */
+@Injectable({ providedIn: 'root' })
+export class QuotationBuilderStore {
+  private readonly api = inject(ApiService);
+
+  readonly loading = signal(false);
+  readonly saving = signal(false);
+  readonly error = signal<string | null>(null);
+
+  readonly quotation = signal<QuotationDto | null>(null);
+  readonly config = signal<ApprovalChainConfigDto | null>(null);
+  readonly products = signal<ProductDto[]>([]);
+  readonly suggestions = signal<UpsellSuggestionDto[]>([]);
+
+  /** The working copy. Edits land here first; the server sees them on save. */
+  readonly draftLines = signal<LinePricingInput[]>([]);
+  readonly tier = signal<CustomerTier>(CustomerTier.GOLD);
+
+  /** Governance, in the shape the pure functions want. */
+  readonly riskConfig = computed<RiskConfig>(() => {
+    const cfg = this.config();
+    return {
+      tierCeilings: cfg?.tierCeilings ?? { BRONZE: 5, SILVER: 10, GOLD: 15 },
+      categoryCeilings: cfg?.categoryCeilings ?? { HARDWARE: 15, SERVICES: 10, SUBSCRIPTION: 5 },
+      thresholds: cfg?.thresholds,
+      chains: cfg?.chains,
+    };
+  });
+
+  /* ---- everything below recomputes synchronously on every mutation ---- */
+
+  readonly pricedLines = computed<PricedLine[]>(() =>
+    this.draftLines().map((line) => computeLinePricing(line, this.tier(), this.riskConfig())),
+  );
+
+  readonly totals = computed(() => computeQuoteTotals(this.pricedLines()));
+  readonly subtotal = computed(() => this.totals().subtotal);
+  readonly discountTotal = computed(() => this.totals().discountTotal);
+  readonly taxTotal = computed(() => this.totals().taxTotal);
+  readonly grandTotal = computed(() => this.totals().grandTotal);
+  readonly oneTimeTotal = computed(() => this.totals().oneTimeTotal);
+  readonly recurringTotal = computed(() => this.totals().recurringTotal);
+
+  readonly margin = computed(() => computeMargin(this.pricedLines()));
+  readonly marginAmount = computed(() => this.margin().marginAmount);
+  readonly marginPct = computed(() => this.margin().marginPct);
+
+  /** The live blended-risk preview. This is what makes "OVER (+8pt)" appear instantly. */
+  readonly risk = computed(() =>
+    calculateBlendedRisk(
+      this.pricedLines().map((l) => ({
+        id: l.id, productName: l.productName, category: l.category,
+        qty: l.qty, unitPrice: l.unitPrice, discountPct: l.discountPct,
+        allowedDiscountPct: l.allowedDiscountPct,
+      })),
+      this.tier(),
+      this.riskConfig(),
+    ),
+  );
+
+  readonly willAutoApprove = computed(() => isAutoApproved(this.risk()));
+  readonly overLines = computed(() => this.pricedLines().filter((l) => l.discountStatus === 'OVER'));
+  readonly isDirty = signal(false);
+
+  /* ------------------------------------------------------------ loading */
+
+  async load(quotationId: string): Promise<void> {
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      const [quotation, config, products] = await Promise.all([
+        firstValueFrom(this.api.get<QuotationDto>(`/quotations/${quotationId}`)),
+        firstValueFrom(this.api.get<ApprovalChainConfigDto>('/config')),
+        firstValueFrom(this.api.get<ProductDto[]>('/products', { status: 'ACTIVE', pageSize: 200 })),
+      ]);
+      this.quotation.set(quotation);
+      this.config.set(config);
+      this.products.set(products ?? []);
+      this.tier.set(quotation.tier);
+      this.draftLines.set(quotation.lines.map(toInput));
+      this.isDirty.set(false);
+      void this.loadSuggestions(quotationId);
+    } catch (err: any) {
+      this.error.set(err?.error?.error?.message ?? 'Could not load this quotation.');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async loadSuggestions(quotationId: string): Promise<void> {
+    try {
+      this.suggestions.set(
+        await firstValueFrom(this.api.get<UpsellSuggestionDto[]>('/upsell/suggestions', { quotationId })),
+      );
+    } catch {
+      // Agent B has not landed the endpoint yet; the panel shows its own hint.
+      this.suggestions.set([]);
+    }
+  }
+
+  /* ------------------------------------------------------------ mutations */
+
+  setQty(lineId: string, qty: number): void {
+    this.draftLines.update((lines) => lines.map((l) => (l.id === lineId ? { ...l, qty: Math.max(0, qty) } : l)));
+    this.isDirty.set(true);
+  }
+
+  setDiscount(lineId: string, discountPct: number): void {
+    this.draftLines.update((lines) =>
+      lines.map((l) => (l.id === lineId ? { ...l, discountPct: Math.min(100, Math.max(0, discountPct)) } : l)),
+    );
+    this.isDirty.set(true);
+  }
+
+  removeLine(lineId: string): void {
+    this.draftLines.update((lines) => lines.filter((l) => l.id !== lineId));
+    this.isDirty.set(true);
+  }
+
+  /** Adding an upsell is an ordinary line add — the margin moves in the same tick. */
+  addProduct(product: ProductDto, qty = 1, fromUpsell = false): void {
+    const id = `tmp-${product.id}-${Date.now()}`;
+    this.draftLines.update((lines) => [
+      ...lines,
+      {
+        id,
+        productId: product.id,
+        productName: product.name,
+        sku: product.sku,
+        category: product.category,
+        qty,
+        unitPrice: product.unitPrice,
+        costPrice: product.costPrice,
+        discountPct: 0,
+        taxPct: product.taxPct,
+        isSubscription: product.isSubscription,
+        recurringCycle: product.recurringCycle,
+        addedFromUpsell: fromUpsell,
+      },
+    ]);
+    this.isDirty.set(true);
+    this.suggestions.update((list) => list.filter((s) => s.productId !== product.id));
+  }
+
+  addSuggestion(suggestion: UpsellSuggestionDto): void {
+    const product = this.products().find((p) => p.id === suggestion.productId);
+    if (product) this.addProduct(product, 1, true);
+  }
+
+  dismissSuggestion(productId: string): void {
+    this.suggestions.update((list) => list.filter((s) => s.productId !== productId));
+  }
+
+  reset(): void {
+    const q = this.quotation();
+    this.draftLines.set(q ? q.lines.map(toInput) : []);
+    this.isDirty.set(false);
+  }
+}
+
+function toInput(line: QuotationDto['lines'][number]): LinePricingInput {
+  return {
+    id: line.id,
+    productId: line.productId,
+    productName: line.productName,
+    sku: line.sku,
+    category: line.category,
+    qty: line.qty,
+    unitPrice: line.unitPrice,
+    costPrice: line.costPrice,
+    discountPct: line.discountPct,
+    taxPct: line.taxPct,
+    isSubscription: line.isSubscription,
+    recurringCycle: line.recurringCycle,
+    addedFromUpsell: line.addedFromUpsell,
+  };
+}

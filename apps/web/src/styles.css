@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .df-card { @apply rounded-xl border border-slate-200 bg-white shadow-sm; }
+  .df-btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50; }
+  .df-btn-primary { @apply df-btn bg-brand-600 text-white hover:bg-brand-700; }
+  .df-btn-ghost { @apply df-btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50; }
+  .df-btn-success { @apply df-btn bg-emerald-600 text-white hover:bg-emerald-700; }
+  .df-btn-warn { @apply df-btn bg-amber-500 text-white hover:bg-amber-600; }
+  .df-btn-danger { @apply df-btn bg-rose-600 text-white hover:bg-rose-700; }
+  .df-input { @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100; }
+  .df-label { @apply mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500; }
+  .df-th { @apply px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500; }
+  .df-td { @apply px-4 py-3 text-sm text-slate-700; }
+  .df-chip { @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium; }
+  .df-h1 { @apply text-2xl font-semibold tracking-tight text-slate-900; }
+  .df-h2 { @apply text-lg font-semibold text-slate-900; }
+  .df-muted { @apply text-sm text-slate-500; }
+}
+
+/* Anything wide scrolls inside its own box; the page body never scrolls sideways. */
+.df-scroll-x { @apply overflow-x-auto; }
