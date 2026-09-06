@@ -77,7 +77,10 @@ export async function seedReportingHistory(ctx: SeedContext): Promise<void> {
       createdAt: ctx.daysAgo(daysBack),
       submittedAt: ctx.daysAgo(daysBack),
       // Kept recent on purpose: only the deliberate idle quotes below should be stalled.
-      lastActivityAt: ctx.daysAgo(Math.min(5, Math.max(0, daysBack - 1))),
+      // Floor of 1 (not 0): the seed anchor is normalised to midday UTC, so
+      // "0 days ago" is a fixed instant that reads as a future timestamp for
+      // anyone viewing the app before noon UTC on seed day.
+      lastActivityAt: ctx.daysAgo(Math.min(5, Math.max(1, daysBack - 1))),
       validUntil: ctx.daysAhead(30 - daysBack),
     });
     quotations.push(built.doc);

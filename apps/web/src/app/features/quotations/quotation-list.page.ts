@@ -13,7 +13,7 @@ import { ToastStore } from '../../core/state/toast.store';
 import {
   AgoPipe, ColumnDef, DataTableComponent, EmptyStateComponent, ErrorStateComponent,
   KanbanBoardComponent, LoadingComponent, ModalComponent, MoneyPipe, PaginatorComponent,
-  SearchBoxComponent, StatusChipComponent,
+  SearchBoxComponent, SearchSelectComponent, StatusChipComponent, type SearchSelectPage,
 } from '../../shared/ui';
 
 /**
@@ -45,7 +45,7 @@ function toSummary(q: QuotationDto): QuotationSummaryDto {
   imports: [
     FormsModule, KanbanBoardComponent, DataTableComponent, LoadingComponent, ErrorStateComponent,
     EmptyStateComponent, ModalComponent, MoneyPipe, AgoPipe, StatusChipComponent,
-    PaginatorComponent, SearchBoxComponent,
+    PaginatorComponent, SearchBoxComponent, SearchSelectComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -123,26 +123,23 @@ function toSummary(q: QuotationDto): QuotationSummaryDto {
     }
 
     <df-modal [open]="pickerOpen()" title="New quotation" subtitle="Their tier and price list come with them." (close)="pickerOpen.set(false)">
-      @if (customersLoading()) {
-        <df-loading [count]="3" label="Loading customers" />
-      } @else if (customers().length) {
-        <label class="block">
-          <span class="df-label">Customer</span>
-          <select class="df-input" [(ngModel)]="pickedCustomerId">
-            @for (c of customers(); track c.id) {
-              <option [value]="c.id">{{ c.name }} — {{ tierLabel[c.tier] }}</option>
-            }
-          </select>
-        </label>
-        <div class="mt-5 flex justify-end gap-2">
-          <button type="button" class="df-btn-ghost" (click)="pickerOpen.set(false)">Cancel</button>
-          <button type="button" class="df-btn-primary" [disabled]="!pickedCustomerId || creating()" (click)="confirmCreate()">
-            {{ creating() ? 'Creating…' : 'Create quotation' }}
-          </button>
-        </div>
-      } @else {
-        <p class="text-sm text-slate-600">No customers are configured yet. An admin needs to add one first.</p>
-      }
+      <label class="block">
+        <span class="df-label">Customer</span>
+        <df-search-select
+          [fetchPage]="fetchCustomers"
+          [displayWith]="customerLabel"
+          placeholder="Select a customer…"
+          searchPlaceholder="Search customers by name…"
+          emptyText="No customers match"
+          [(ngModel)]="pickedCustomerId"
+        />
+      </label>
+      <div class="mt-5 flex justify-end gap-2">
+        <button type="button" class="df-btn-ghost" (click)="pickerOpen.set(false)">Cancel</button>
+        <button type="button" class="df-btn-primary" [disabled]="!pickedCustomerId || creating()" (click)="confirmCreate()">
+          {{ creating() ? 'Creating…' : 'Create quotation' }}
+        </button>
+      </div>
     </df-modal>
   `,
 })
@@ -178,10 +175,17 @@ export class QuotationListPage implements OnInit {
   protected readonly query = new ListQuery(25);
 
   protected readonly pickerOpen = signal(false);
-  protected readonly customersLoading = signal(false);
   protected readonly creating = signal(false);
-  protected readonly customers = signal<CustomerDto[]>([]);
   pickedCustomerId = '';
+
+  /** Server-side search + pagination for the customer picker — see `SearchSelectComponent`. */
+  protected readonly fetchCustomers = async (q: string, page: number, pageSize: number): Promise<SearchSelectPage<CustomerDto>> => {
+    const { data, meta } = await firstValueFrom(
+      this.api.getWithMeta<CustomerDto[]>('/customers', { q: q || undefined, page, pageSize }),
+    );
+    return { items: data, total: meta?.total ?? data.length };
+  };
+  protected readonly customerLabel = (c: CustomerDto): string => `${c.name} — ${this.tierLabel[c.tier]}`;
 
   protected readonly columns: ColumnDef<QuotationSummaryDto>[] = [
     { key: 'number', header: 'Quotation', value: (r) => r.number, mono: true, width: '9rem' },
@@ -252,18 +256,9 @@ export class QuotationListPage implements OnInit {
   }
   open(card: QuotationSummaryDto): void { void this.router.navigate(['/app/quotations', card.id]); }
 
-  async create(): Promise<void> {
+  create(): void {
     this.pickedCustomerId = '';
     this.pickerOpen.set(true);
-    if (this.customers().length) return;
-    this.customersLoading.set(true);
-    try {
-      this.customers.set(await firstValueFrom(this.api.get<CustomerDto[]>('/customers', { pageSize: 200 })));
-    } catch {
-      this.customers.set([]);
-    } finally {
-      this.customersLoading.set(false);
-    }
   }
 
   async confirmCreate(): Promise<void> {

@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { APP_NAME, ROLE_LABEL } from '@dealflow/shared';
 import { SessionStore } from '../core/state/session.store';
-import { NotificationBellComponent } from '../shared/ui/notification-bell.component';
+// Notification bell hidden for now — see df-notification-bell usage below.
+// import { NotificationBellComponent } from '../shared/ui/notification-bell.component';
 
 /**
  * The internal workspace shell. Top navigation is exactly the mockup's:
@@ -16,7 +17,7 @@ import { NotificationBellComponent } from '../shared/ui/notification-bell.compon
 @Component({
   selector: 'df-internal-shell',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, NotificationBellComponent],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive /*, NotificationBellComponent */],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="min-h-screen bg-slate-50">
@@ -53,7 +54,7 @@ import { NotificationBellComponent } from '../shared/ui/notification-bell.compon
                 >Back-end</a
               >
             }
-            <df-notification-bell />
+            <!-- <df-notification-bell /> -->
             <div class="flex items-center gap-2">
               <span
                 class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 ring-2 ring-white/80"

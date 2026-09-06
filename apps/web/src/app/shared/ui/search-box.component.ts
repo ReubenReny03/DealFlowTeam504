@@ -18,7 +18,8 @@ import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, input, outpu
       <input
         #box
         type="search"
-        class="df-input !pl-8"
+        class="df-input !pl-8 [&::-webkit-search-cancel-button]:appearance-none"
+        style="-moz-appearance: textfield;"
         [class.!pr-8]="value()"
         [value]="value()"
         [placeholder]="placeholder()"

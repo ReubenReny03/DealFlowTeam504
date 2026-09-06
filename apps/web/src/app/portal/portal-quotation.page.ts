@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CATEGORY_LABEL } from '@dealflow/shared';
 import { ToastStore } from '../core/state/toast.store';
-import { LoadingComponent, MoneyPipe, ShortDatePipe, StatusChipComponent } from '../shared/ui';
+import { AgoPipe, LoadingComponent, MoneyPipe, ShortDatePipe, StatusChipComponent } from '../shared/ui';
 import { PortalStore } from './portal.store';
 
 /**
@@ -19,7 +19,7 @@ import { PortalStore } from './portal.store';
 @Component({
   selector: 'df-portal-quotation',
   standalone: true,
-  imports: [FormsModule, RouterLink, MoneyPipe, ShortDatePipe, StatusChipComponent, LoadingComponent],
+  imports: [FormsModule, RouterLink, MoneyPipe, ShortDatePipe, AgoPipe, StatusChipComponent, LoadingComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (store.loading()) {
@@ -98,57 +98,116 @@ import { PortalStore } from './portal.store';
         </table>
       </div>
 
-      <!-- line-level comments and counter -->
+      <!-- line-level comments and counter — the heart of the portal, so it gets its own
+           unmistakably-distinct surface rather than blending in as "one more section" -->
       <section class="mt-8">
-        <h2 class="df-h2">Ask about a line, or propose different terms</h2>
-        <div class="df-card mt-3 divide-y divide-slate-100">
-          @for (line of q.lines; track line.id) {
-            <div class="p-4">
-              <div class="flex flex-wrap items-center justify-between gap-2">
-                <p class="text-sm font-medium text-slate-800">{{ line.productName }}</p>
-                <span class="text-xs text-slate-400">currently {{ line.discountPct }}% off</span>
+        <div class="df-card overflow-hidden">
+          <!-- header: what this box is for, and how much is already happening in it —
+               a neutral bar like every other table header, with just a touch of brand on the icon -->
+          <div class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4">
+            <div class="flex items-start gap-3">
+              <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-base">💬</div>
+              <div>
+                <h2 class="text-base font-semibold text-slate-900">Negotiate these terms</h2>
+                <p class="mt-0.5 text-sm text-slate-500">Ask about a line, or propose different pricing — your account manager sees every message.</p>
               </div>
-              <div class="mt-2 grid gap-2 sm:grid-cols-[1fr_9rem]">
-                <input class="df-input" [(ngModel)]="comments[line.id]"
-                       [placeholder]="'e.g. Can this be 15% off instead of ' + line.discountPct + '%?'"
-                       [attr.aria-label]="'Comment on ' + line.productName" />
-                <div class="flex items-center gap-1">
-                  <input class="df-input text-right" type="number" min="0" max="100" [(ngModel)]="counters[line.id]"
-                         placeholder="—" [attr.aria-label]="'Counter discount for ' + line.productName" />
-                  <span class="text-sm text-slate-400">%</span>
+            </div>
+            @if (openThreadCount(q.lines) > 0) {
+              <span class="df-chip whitespace-nowrap border-slate-200 bg-white text-slate-600">
+                {{ openThreadCount(q.lines) }} line{{ openThreadCount(q.lines) === 1 ? '' : 's' }} in discussion
+              </span>
+            }
+          </div>
+
+          <!-- one thread per line -->
+          <div class="divide-y divide-slate-100 px-5">
+            @for (line of q.lines; track line.id) {
+              <div class="py-4">
+                <div [class]="hasDraft(line.id)
+                  ? 'rounded-lg bg-slate-50 ring-1 ring-inset ring-slate-200 p-3 -mx-3 transition-colors'
+                  : 'rounded-lg p-3 -mx-3 transition-colors'">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <p class="text-sm font-semibold text-slate-800">{{ line.productName }}</p>
+                    <div class="flex items-center gap-2">
+                      @if (hasDraft(line.id)) {
+                        <span class="df-chip inline-flex items-center gap-1 border-slate-200 bg-white text-slate-600">
+                          <span class="h-1.5 w-1.5 rounded-full bg-brand-500"></span> draft
+                        </span>
+                      }
+                      <span class="df-chip border-slate-200 bg-white text-slate-500">currently {{ line.discountPct }}% off</span>
+                    </div>
+                  </div>
+
+                  @if (eventsFor(line.id).length > 0) {
+                    <div class="mt-3 space-y-2">
+                      @for (event of eventsFor(line.id); track event.id) {
+                        <div class="flex items-end gap-2" [class.flex-row-reverse]="event.fromCustomer">
+                          <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+                               [class]="event.fromCustomer ? 'bg-brand-50 text-brand-700' : 'bg-slate-100 text-slate-500'">
+                            {{ initials(event.authorName) }}
+                          </div>
+                          <div class="max-w-[85%] rounded-2xl border px-3 py-2 text-sm leading-relaxed"
+                               [class]="event.fromCustomer ? 'rounded-br-sm border-brand-100 bg-brand-50/70 text-slate-800' : 'rounded-bl-sm border-slate-100 bg-slate-50 text-slate-700'">
+                            <p class="text-xs font-medium text-slate-400">
+                              {{ event.fromCustomer ? 'You' : event.authorName }} · {{ event.createdAt | ago }}
+                            </p>
+                            @if (event.comment) { <p class="mt-0.5">{{ event.comment }}</p> }
+                            @if (event.counterDiscountPct != null) {
+                              <p class="mt-1 text-xs font-semibold text-slate-500">
+                                Proposed {{ event.counterDiscountPct }}% off
+                              </p>
+                            }
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  }
+
+                  <div class="mt-3 grid gap-2 sm:grid-cols-[1fr_9rem]">
+                    <input class="df-input" [(ngModel)]="comments[line.id]"
+                           [placeholder]="'e.g. Can this be 15% off instead of ' + line.discountPct + '%?'"
+                           [attr.aria-label]="'Comment on ' + line.productName" />
+                    <div class="flex items-center gap-1">
+                      <input class="df-input text-right" type="number" min="0" max="100" [(ngModel)]="counters[line.id]"
+                             placeholder="—" [attr.aria-label]="'Counter discount for ' + line.productName" />
+                      <span class="text-sm text-slate-400">%</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-              @for (event of eventsFor(line.id); track event.id) {
-                <p class="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                  <span class="font-medium">{{ event.authorName }}:</span> {{ event.comment }}
-                  @if (event.counterDiscountPct != null) { <span class="text-slate-400"> (proposed {{ event.counterDiscountPct }}%)</span> }
-                </p>
-              }
-            </div>
-          }
+            }
+          </div>
+
+          <!-- terms that apply to the whole request, not one line -->
+          <div class="grid gap-3 border-t border-slate-100 px-5 py-4 sm:grid-cols-2">
+            <label class="block">
+              <span class="df-label">Requested delivery date</span>
+              <input class="df-input" type="date" [(ngModel)]="requestedDeliveryDate" />
+            </label>
+            <label class="block">
+              <span class="df-label">Anything else?</span>
+              <input class="df-input" [(ngModel)]="note" placeholder="A note for your account manager" />
+            </label>
+          </div>
+
+          <!-- the notice that makes the loop honest, right next to the button it explains -->
+          <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4">
+            <p class="max-w-md text-xs leading-relaxed text-slate-500">{{ store.negotiationNoticeText() }}</p>
+            <button type="button" class="df-btn-primary" [disabled]="store.submitting() || !hasAnyDraft()" (click)="submitRequest()">
+              @if (store.submitting()) { Sending… } @else { Send to your account manager }
+            </button>
+          </div>
         </div>
 
-        <div class="mt-4 grid gap-3 sm:grid-cols-2">
-          <label class="block">
-            <span class="df-label">Requested delivery date</span>
-            <input class="df-input" type="date" [(ngModel)]="requestedDeliveryDate" />
-          </label>
-          <label class="block">
-            <span class="df-label">Anything else?</span>
-            <input class="df-input" [(ngModel)]="note" placeholder="A note for your account manager" />
-          </label>
+        <!-- a separate, calmer path: accept the terms exactly as they stand -->
+        <div class="df-card mt-4 flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+          <div>
+            <p class="text-sm font-semibold text-slate-800">Happy with these terms?</p>
+            <p class="text-xs text-slate-500">Skip the back-and-forth and confirm — your order goes straight to fulfillment.</p>
+          </div>
+          <button type="button" class="df-btn-success" [disabled]="store.submitting() || !store.canConfirm()" (click)="confirm()">Confirm Quotation</button>
         </div>
       </section>
-
-      <!-- the notice that makes the loop honest -->
-      <p class="mt-6 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-relaxed text-sky-900">
-        {{ store.negotiationNoticeText() }}
-      </p>
-
-      <div class="mt-5 flex flex-wrap gap-2">
-        <button type="button" class="df-btn-primary" [disabled]="store.submitting()" (click)="submitRequest()">Submit Request</button>
-        <button type="button" class="df-btn-success" [disabled]="store.submitting() || !store.canConfirm()" (click)="confirm()">Confirm Quotation</button>
-      </div>
       }
     }
   `,
@@ -186,7 +245,31 @@ export class PortalQuotationPage implements OnInit, OnChanges {
   categoryLabel(c: string): string { return CATEGORY_LABEL[c as keyof typeof CATEGORY_LABEL] ?? c; }
 
   eventsFor(lineId: string) {
-    return this.store.events().filter((e) => e.lineId === lineId && e.comment);
+    return this.store.events().filter((e) => e.lineId === lineId && (e.comment || e.counterDiscountPct != null));
+  }
+
+  /** How many lines already have back-and-forth on them — the header badge. */
+  openThreadCount(lines: { id: string }[]): number {
+    return lines.filter((l) => this.eventsFor(l.id).length > 0).length;
+  }
+
+  /** True once the customer has typed something for this line that hasn't been sent yet. */
+  hasDraft(lineId: string): boolean {
+    return !!this.comments[lineId]?.trim() || this.counters[lineId] != null;
+  }
+
+  hasAnyDraft(): boolean {
+    return (
+      Object.keys(this.comments).some((id) => this.comments[id]?.trim()) ||
+      Object.keys(this.counters).some((id) => this.counters[id] != null) ||
+      !!this.note.trim() ||
+      !!this.requestedDeliveryDate
+    );
+  }
+
+  initials(name: string): string {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '?';
   }
 
   async submitRequest(): Promise<void> {

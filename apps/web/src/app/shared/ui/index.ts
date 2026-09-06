@@ -9,6 +9,7 @@ export * from './confirm-dialog.component';
 export * from './notification-bell.component';
 export * from './paginator.component';
 export * from './search-box.component';
+export * from './search-select.component';
 export * from './empty-state.component';
 export * from './loading.component';
 export * from './error-state.component';

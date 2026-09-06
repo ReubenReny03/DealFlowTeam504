@@ -1,7 +1,10 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { CATEGORY_LABEL, STAGE_LABEL, type ReissuePortalLinkResponse } from '@dealflow/shared';
+import {
+  CATEGORY_LABEL, formatMoney, STAGE_LABEL,
+  type ProductDto, type ReissuePortalLinkResponse,
+} from '@dealflow/shared';
 import { QuotationBuilderStore } from '../../core/state/quotation-builder.store';
 import { ToastStore } from '../../core/state/toast.store';
 import {
@@ -10,7 +13,9 @@ import {
   LongDatePipe,
   ModalComponent,
   MoneyPipe,
+  SearchSelectComponent,
   StatusChipComponent,
+  type SearchSelectPage,
 } from '../../shared/ui';
 
 /**
@@ -33,6 +38,7 @@ import {
     LoadingComponent,
     ErrorStateComponent,
     ModalComponent,
+    SearchSelectComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -138,7 +144,7 @@ import {
                           <input
                             class="df-input !w-20 text-right"
                             type="number"
-                            min="0"
+                            min="1"
                             [ngModel]="line.qty"
                             (ngModelChange)="store.setQty(line.id, +$event)"
                             [attr.aria-label]="'Quantity for ' + line.productName"
@@ -216,12 +222,14 @@ import {
               <div class="mt-4 flex items-end gap-2">
                 <label class="flex-1">
                   <span class="df-label">Add a product</span>
-                  <select class="df-input" [(ngModel)]="pickedProductId">
-                    <option value="">Choose a product…</option>
-                    @for (p of store.products(); track p.id) {
-                      <option [value]="p.id">{{ p.name }} — {{ p.unitPrice | money }}</option>
-                    }
-                  </select>
+                  <df-search-select
+                    [fetchPage]="fetchProducts"
+                    [displayWith]="productLabel"
+                    placeholder="Choose a product…"
+                    searchPlaceholder="Search products by name or SKU…"
+                    emptyText="No products match"
+                    [(ngModel)]="pickedProductId"
+                  />
                 </label>
                 <button
                   type="button"
@@ -441,6 +449,25 @@ export class QuotationDetailPage implements OnInit {
   pickedProductId = '';
   readonly reissuing = signal(false);
   readonly reissuedLink = signal<ReissuePortalLinkResponse | null>(null);
+
+  /**
+   * Client-side search + pagination for the "Add a product" picker.
+   * `store.products()` is already the full active catalogue in memory (the
+   * upsell panel needs it resolvable by id too), so there's no server round
+   * trip to make here — but a plain `<select>` still had to hand the browser
+   * every option's DOM node at once. This filters and pages that same array
+   * instead, so typing narrows it and only one page of `<li>`s ever renders.
+   */
+  protected readonly fetchProducts = async (q: string, page: number, pageSize: number): Promise<SearchSelectPage<ProductDto>> => {
+    const term = q.trim().toLowerCase();
+    const all = this.store.products();
+    const matches = term
+      ? all.filter((p) => p.name.toLowerCase().includes(term) || p.sku.toLowerCase().includes(term))
+      : all;
+    const start = (page - 1) * pageSize;
+    return { items: matches.slice(start, start + pageSize), total: matches.length };
+  };
+  protected readonly productLabel = (p: ProductDto): string => `${p.name} — ${formatMoney(p.unitPrice)}`;
 
   ngOnInit(): void {
     void this.store.load(this.id());

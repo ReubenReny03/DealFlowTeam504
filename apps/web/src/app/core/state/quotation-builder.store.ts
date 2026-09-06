@@ -161,7 +161,7 @@ export class QuotationBuilderStore {
 
   setQty(lineId: string, qty: number): void {
     this.draftLines.update((lines) =>
-      lines.map((l) => (l.id === lineId ? { ...l, qty: Math.max(0, qty) } : l)),
+      lines.map((l) => (l.id === lineId ? { ...l, qty: Math.max(1, qty) } : l)),
     );
     this.isDirty.set(true);
   }

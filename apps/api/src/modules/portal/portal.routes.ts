@@ -458,13 +458,11 @@ portalRouter.post(
       throw invalidState(`This quotation is ${quotation.stage} and is not ready to confirm.`);
     }
     const actor = await resolvePortalActor(req);
-    const now = new Date();
 
-    quotation.stage = QuoteStage.CONFIRMED;
-    quotation.version += 1;
-    quotation.lastActivityAt = now;
-    await quotation.save();
-
+    // Stage transition to CONFIRMED (plus orderId/version/lastActivityAt) is
+    // owned by `createOrderFromQuotation` below, once the order is actually
+    // built — it requires the quotation to still be APPROVED/NEGOTIATION when
+    // called, so it must not be flipped to CONFIRMED here first.
     await NegotiationEvent.create({
       quotationId: quotation._id, type: NegotiationEventType.CONFIRMED,
       authorId: actor.id, authorName: actor.name, fromCustomer: true,
@@ -484,8 +482,13 @@ portalRouter.post(
       id: actor.id, name: actor.name, role: Role.CUSTOMER,
     });
 
+    // Reload: `createOrderFromQuotation` is what actually flips the stage to
+    // CONFIRMED (and sets orderId/version/lastActivityAt), on its own copy of
+    // the document — the in-memory `quotation` above is stale otherwise.
+    const confirmed = await Quotation.findById(quotation._id);
+
     const payload: PortalConfirmResponse = {
-      quotation: toPortalQuotationDto(quotation),
+      quotation: toPortalQuotationDto(confirmed),
       order: order ? toDto(order) : null,
       fulfillment: fulfillment ? toDto(fulfillment) : null,
       reEnteredApproval: false,

@@ -114,9 +114,12 @@ import {
         </label>
         <label class="block">
           <span class="df-label">Category</span>
-          <select class="df-input" [(ngModel)]="draft.category">
+          <select class="df-input" [(ngModel)]="draft.category" [disabled]="draft.isSubscription">
             @for (c of categories; track c) { <option [value]="c">{{ categoryLabel[c] }}</option> }
           </select>
+          @if (draft.isSubscription) {
+            <span class="mt-1 block text-xs text-slate-400">Subscription products are always categorised as Subscription.</span>
+          }
         </label>
         <label class="block">
           <span class="df-label">Unit</span>
@@ -146,7 +149,12 @@ import {
           <textarea class="df-input min-h-[4rem]" [(ngModel)]="draft.description"></textarea>
         </label>
         <label class="flex items-center gap-2 sm:col-span-2">
-          <input type="checkbox" class="h-4 w-4 rounded border-slate-300" [(ngModel)]="draft.isSubscription" />
+          <input
+            type="checkbox"
+            class="h-4 w-4 rounded border-slate-300"
+            [ngModel]="draft.isSubscription"
+            (ngModelChange)="setSubscription($event)"
+          />
           <span class="text-sm text-slate-700">This product is sold as a subscription</span>
         </label>
         @if (draft.isSubscription) {
@@ -276,6 +284,12 @@ export class ProductListPage implements OnInit {
   /** True while the draft's category is one that sits in a warehouse. */
   stocked(): boolean {
     return isStockedCategory(this.draft.category);
+  }
+  /** A subscription product is always categorised as Subscription; flip it back to
+   *  Hardware when the checkbox is unticked so the field isn't left stuck. */
+  setSubscription(isSubscription: boolean): void {
+    this.draft.isSubscription = isSubscription;
+    this.draft.category = isSubscription ? ProductCategory.SUBSCRIPTION : ProductCategory.HARDWARE;
   }
   allocation(warehouseId: string): number {
     return this.allocations()[warehouseId] ?? 0;
