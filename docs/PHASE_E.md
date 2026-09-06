@@ -117,7 +117,7 @@ in `FEATURE_PRIORITY.md` is merged.
 - 401 / 403 behave per `USER_FLOWS §E11` / `§E13`.
 
 **Deliberate non-goals** (deferred per `DECISIONS.md`, unchanged by this phase):
-sockets / live notification push, email delivery, magic-link **email** send
+email delivery, magic-link **email** send
 (the link is generated and shown to the rep to send however they send things),
 drag-and-drop persistence, the fancier stale-version *merge* UI (a reload dialog
 is shipped; a field-level three-way merge is not).

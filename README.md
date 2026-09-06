@@ -65,6 +65,7 @@ Regenerate with `npm run docs:credentials`. Full notes:
 | **Hybrid billing** | One order produces a one-time invoice for the **shipped** quantity **and** a separate recurring schedule billed at the start of each period. Neither ever contains the other. Mid-cycle changes prorate; cancellations issue credit notes. |
 | **Customer portal** | A genuinely separate surface: its own shell, its own guard, its own credential, and a server-side scope check. A counter-offer that breaches the thresholds sends the quotation **back into the approval queue automatically**. |
 | **Deal health** | Stalled deals, discounts out of character **for that specific rep**, and delivery promises at risk. |
+| **Real-time** | Socket.IO over the same HTTP server. Every business event notifies the people it concerns — approvals land on the right desk, a customer's counter-offer reaches their rep, a shipment reaches the customer — and the screens re-read themselves without a refresh. Authorisation is decided once at the handshake, so a customer's socket is in their own rooms and no others. |
 
 Nothing above is hardcoded. Change a discount ceiling on screen 18 and every open
 quotation is re-scored on the spot — some of them stop needing approval entirely.
@@ -97,6 +98,10 @@ apps/api/            Express + TypeScript + Mongoose. app.ts is frozen; modules
                      register themselves with one line in routes.registry.ts
 apps/web/            Angular 17 standalone + signals + Tailwind. Three shells:
                      internal, admin, and the customer portal
+  core/realtime/     one socket per tab, following the SESSION not the router;
+                     screens opt in with liveRefresh([events], reload)
+apps/api/src/realtime/  the socket server + every emit. Rooms are the auth
+                     boundary; emitting is a no-op when realtime is not running
 scripts/             the level-0 reset, and the credentials generator
 ```
 

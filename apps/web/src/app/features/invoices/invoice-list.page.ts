@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/cor
 import { Router } from '@angular/router';
 import { EMPTY_STATES, type InvoiceDto } from '@dealflow/shared';
 import { BillingStore } from '../../core/state/feature.stores';
+import { liveRefresh } from '../../core/realtime/live-refresh';
+import { SocketEvent } from '@dealflow/shared';
 import {
   ColumnDef,
   DataTableComponent,
@@ -135,6 +137,11 @@ export class InvoiceListPage implements OnInit {
   }
   items() {
     return this.store.invoices()?.items ?? [];
+  }
+
+  constructor() {
+    // A payment recorded by anyone in Finance moves this list's statuses.
+    liveRefresh([SocketEvent.INVOICE_UPDATED], () => this.reload());
   }
 
   ngOnInit(): void {

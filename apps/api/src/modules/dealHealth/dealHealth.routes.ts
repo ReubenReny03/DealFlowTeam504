@@ -4,6 +4,7 @@ import {
   AlertStatus,
   AlertType,
   AuditEntity,
+  NotificationType,
   Role,
   averageDiscountPct,
   evaluateDealHealth,
@@ -12,7 +13,7 @@ import {
   type DealHealthDashboardDto,
   type DealHealthQuote,
 } from '@dealflow/shared';
-import { DealAlert, Notification, Order, Quotation, User } from '../../db/models.js';
+import { DealAlert, Order, Quotation, User } from '../../db/models.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { invalidState, notFound } from '../../utils/apiError.js';
@@ -20,6 +21,8 @@ import { listParams, pageMeta, searchFilter, stableSort } from '../../utils/list
 import { ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
+import { emitAlertUpdated } from '../../realtime/emit.js';
+import { notifyUsers, quotationLink } from '../notifications/notifications.service.js';
 import { loadConfig } from '../config/config.service.js';
 import { mountModuleHealth } from '../module.health.js';
 
@@ -153,15 +156,25 @@ async function actOnAlert(
   alert.status = action === 'NUDGE' ? AlertStatus.NUDGED : AlertStatus.ESCALATED;
   await alert.save();
 
-  const recipientId =
-    action === 'NUDGE' ? alert.ownerId : (await User.findOne({ role: Role.SALES_MANAGER, active: true }).lean() as any)?._id ?? alert.ownerId;
-  await Notification.create({
-    userId: recipientId,
-    type: action === 'NUDGE' ? 'DEAL_HEALTH_NUDGE' : 'DEAL_HEALTH_ESCALATION',
-    title: action === 'NUDGE' ? `Nudge: ${alert.entityLabel}` : `Escalated: ${alert.entityLabel}`,
-    body: note || alert.detail,
-    link: alert.quotationId ? `/app/quotations/${alert.quotationId}` : undefined,
-  });
+  // A nudge goes to the rep who owns the deal; an escalation goes to the
+  // manager who has to do something about it. An escalation with no manager
+  // configured still has to land somewhere, so it falls back to the owner.
+  const manager: any = await User.findOne({ role: Role.SALES_MANAGER, active: true }).lean();
+  const recipientId = action === 'NUDGE' ? alert.ownerId : (manager?._id ?? alert.ownerId);
+  await notifyUsers(
+    [String(recipientId)],
+    {
+      type: action === 'NUDGE' ? NotificationType.DEAL_HEALTH_NUDGE : NotificationType.DEAL_HEALTH_ESCALATION,
+      title: action === 'NUDGE' ? `Nudge: ${alert.entityLabel}` : `Escalated: ${alert.entityLabel}`,
+      body: note || alert.detail,
+      link: alert.quotationId ? quotationLink(alert.quotationId) : undefined,
+      entity: AuditEntity.ALERT,
+      entityId: String(alert._id),
+      entityLabel: alert.entityLabel,
+    },
+    actor,
+  );
+  emitAlertUpdated(alert, actor);
 
   await writeAudit({
     actor,

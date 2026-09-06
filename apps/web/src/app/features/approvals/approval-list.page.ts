@@ -9,6 +9,8 @@ import {
 } from '@dealflow/shared';
 import { ApprovalStore } from '../../core/state/feature.stores';
 import { SessionStore } from '../../core/state/session.store';
+import { liveRefresh } from '../../core/realtime/live-refresh';
+import { SocketEvent } from '@dealflow/shared';
 import {
   AgoPipe,
   ColumnDef,
@@ -188,6 +190,15 @@ export class ApprovalListPage implements OnInit {
   ];
 
   protected readonly slaHours = APPROVAL_SLA_HOURS;
+
+  constructor() {
+    // The queue is the point of this screen: a submit, a decision by the desk
+    // before yours, or a threshold change all add or remove rows here.
+    liveRefresh(
+      [SocketEvent.APPROVAL_UPDATED, SocketEvent.CONFIG_UPDATED],
+      () => this.reload(),
+    );
+  }
 
   ngOnInit(): void {
     void this.store.load();

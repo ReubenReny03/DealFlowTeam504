@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import {
@@ -7,6 +7,8 @@ import {
 } from '@dealflow/shared';
 import { QuotationBuilderStore } from '../../core/state/quotation-builder.store';
 import { ToastStore } from '../../core/state/toast.store';
+import { liveRefresh, watchQuotation } from '../../core/realtime/live-refresh';
+import { SocketEvent } from '@dealflow/shared';
 import {
   ErrorStateComponent,
   LoadingComponent,
@@ -469,10 +471,32 @@ export class QuotationDetailPage implements OnInit {
   };
   protected readonly productLabel = (p: ProductDto): string => `${p.name} — ${formatMoney(p.unitPrice)}`;
 
+  constructor() {
+    // Watch this one deal, then re-read it whenever the other side moves it —
+    // the customer comments, counters or confirms, or an approver decides.
+    watchQuotation(computed(() => this.store.quotation()?.id ?? this.id()));
+    liveRefresh(
+      [SocketEvent.QUOTATION_UPDATED, SocketEvent.NEGOTIATION_EVENT, SocketEvent.APPROVAL_UPDATED],
+      () => this.reload(),
+      {
+        // The socket is a firehose of every deal this session can see; only the
+        // one on screen should reload it.
+        when: (e) => !e.quotationId || e.quotationId === (this.store.quotation()?.id ?? this.id()),
+      },
+    );
+  }
+
   ngOnInit(): void {
     void this.store.load(this.id());
   }
   reload(): void {
+    // Never overwrite work in progress. An edited-but-unsaved builder keeps its
+    // lines; the save itself already detects the version conflict and offers
+    // "reload the latest version", which is the honest way to resolve it.
+    if (this.store.isDirty()) {
+      this.store.staleConflict.set(true);
+      return;
+    }
     void this.store.load(this.id());
   }
 

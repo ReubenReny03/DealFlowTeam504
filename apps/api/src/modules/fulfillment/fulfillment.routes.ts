@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   AuditEntity,
   FulfillmentStatus,
+  NotificationType,
   OrderStatus,
   Role,
   checkBackorderConsolidation,
@@ -20,6 +21,16 @@ import { listParams, pageMeta, searchRegex, stableSort } from '../../utils/listQ
 import { ok } from '../../utils/respond.js';
 import { toDto } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
+import {
+  emitFulfillmentUpdated,
+  emitOrderUpdated,
+  emitStockUpdated,
+} from '../../realtime/emit.js';
+import {
+  fulfillmentLink,
+  notifyCustomer,
+  notifyUsers,
+} from '../notifications/notifications.service.js';
 import { mountModuleHealth } from '../module.health.js';
 import { planAndApply, stockAndWarehouseCatalog, toSplitBackorders } from './fulfillment.service.js';
 
@@ -442,6 +453,41 @@ fulfillmentRouter.post(
       reason: 'Allocations marked shipped',
     });
 
+    const shipActor = { id: req.user!.id, name: req.user!.name, role: req.user!.role };
+    const partial = fulfillment.status === FulfillmentStatus.PARTIALLY_SHIPPED;
+    const shipped = {
+      type: NotificationType.FULFILLMENT_SHIPPED,
+      title: partial ? `${order.number} partially shipped` : `${order.number} shipped`,
+      body: partial
+        ? `${(fulfillment.backorders as any[]).length} line(s) remain on backorder.`
+        : 'Every allocated line has left the warehouse.',
+      entity: AuditEntity.FULFILLMENT,
+      entityId: String(fulfillment._id),
+      entityLabel: fulfillment.orderNumber,
+    };
+    // The rep who owns the deal, and the customer waiting on the delivery. Each
+    // gets a link into the surface they can actually open.
+    await notifyUsers(
+      [String(order.ownerId)],
+      { ...shipped, link: fulfillmentLink(fulfillment._id) },
+      shipActor,
+    );
+    await notifyCustomer(
+      String(order.customerId),
+      { ...shipped, link: '/portal/quotations' },
+      shipActor,
+    );
+
+    emitFulfillmentUpdated(fulfillment, shipActor);
+    emitOrderUpdated(order, shipActor);
+    // Shipping moved real stock, so screen 7's live stock table is now stale.
+    emitStockUpdated({
+      productId: '',
+      reason: `${order.number} shipped`,
+      actorId: shipActor.id,
+      actorName: shipActor.name,
+    });
+
     ok(res, { fulfillment: toDto(fulfillment), order: toDto(order) });
   }),
 );
@@ -521,6 +567,28 @@ fulfillmentRouter.post(
       entityId: String(fulfillment._id),
       entityLabel: fulfillment.orderNumber,
       reason: 'Backorder consolidated into one shipment now that stock covers it',
+    });
+
+    const consolidateActor = { id: req.user!.id, name: req.user!.name, role: req.user!.role };
+    await notifyCustomer(
+      String(fulfillment.customerId),
+      {
+        type: NotificationType.FULFILLMENT_SHIPPED,
+        title: `${fulfillment.orderNumber}: your backorder shipped`,
+        body: 'Stock came in and the outstanding lines went out as a single shipment.',
+        link: '/portal/quotations',
+        entity: AuditEntity.FULFILLMENT,
+        entityId: String(fulfillment._id),
+        entityLabel: fulfillment.orderNumber,
+      },
+      consolidateActor,
+    );
+    emitFulfillmentUpdated(fulfillment, consolidateActor);
+    emitStockUpdated({
+      productId: '',
+      reason: `${fulfillment.orderNumber} backorder consolidated`,
+      actorId: consolidateActor.id,
+      actorName: consolidateActor.name,
     });
 
     ok(res, toDto(fulfillment));

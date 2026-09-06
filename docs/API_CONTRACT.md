@@ -695,6 +695,79 @@ qtyInvoiced` on the non-subscription lines. Recurring lines are never on it.
 `meta`. `POST /notifications/read-all` marks every unread notification for the
 caller read and returns `{ updated }`.
 
+Notifications are **written by the business events themselves**, never by a
+client — there is no `POST /notifications`. `notifications.service.ts` is the one
+producer; the table under "Realtime" below says which event notifies whom. Both
+read endpoints also push a fresh `notification:count` over the socket, so a
+person with three tabs open sees one badge, not three.
+
+### Realtime (Socket.IO)
+
+Not REST. `ws://<host>/realtime` — its own path, deliberately outside
+`/api/v1`, on the same HTTP server and the same origin.
+
+**Handshake.** Credentials go in `auth`, not a header:
+`{ token: "<JWT>" }` for an internal user or a signed-in customer, or
+`{ portalToken: "<magic link token>" }` for a link session. A socket with
+neither, or with a token that no longer resolves to an active account, is
+**refused**. On success the server emits `realtime:ready` with
+`{ userId, role, customerId?, quotationId?, rooms, serverTime }`.
+
+**Client → server**
+
+| Event | Payload | Notes |
+| ----- | ------- | ----- |
+| `subscribe:quotation` | `quotationId`, optional ack `(ok: boolean)` | Internal users may watch any quotation; a customer only their own company's; a magic-link session only the one it unlocks. A refusal acks `false`. |
+| `unsubscribe:quotation` | `quotationId` | Ignored for a magic-link session's own quotation — leaving it would deafen the portal. |
+
+**Server → client**
+
+| Event | Reaches | Payload |
+| ----- | ------- | ------- |
+| `notification:new` | `user:<id>` | the full `NotificationDto` |
+| `notification:count` | `user:<id>` | `{ unreadCount }` |
+| `quotation:updated` | the deal's room, its owner, its customer, managers | `QuotationUpdatedPayload` |
+| `approval:updated` | the deal's room, its owner, MGR/FIN/ADMIN | `ApprovalUpdatedPayload` |
+| `negotiation:event` | the deal's room, its customer, its owner | `NegotiationEventPayload` |
+| `order:updated` | the customer, `internal` | `OrderUpdatedPayload` |
+| `fulfillment:updated` | the customer, `internal` | `FulfillmentUpdatedPayload` |
+| `invoice:updated` | the customer, FIN/ADMIN | `InvoiceUpdatedPayload` |
+| `subscription:updated` | the customer, FIN/ADMIN | `SubscriptionUpdatedPayload` |
+| `alert:updated` | the deal's owner, MGR/ADMIN | `AlertUpdatedPayload` |
+| `stock:updated` | `internal` | `StockUpdatedPayload` |
+| `config:updated` | `internal` | `ConfigUpdatedPayload` |
+
+Every payload carries `at`, and `actorId`/`actorName` where there was a human
+actor — a client uses `actorId` to ignore the echo of its own action. A domain
+event names what changed and does not carry the changed document: the screen
+re-reads it over REST so it keeps the role scoping and pagination the endpoint
+already applies.
+
+### Which event notifies whom
+
+| Business event | Recipient | `NotificationType` |
+| -------------- | --------- | ------------------ |
+| Quotation submitted, approval required | whoever holds the **active step's** role | `APPROVAL_REQUESTED` |
+| Quotation submitted, risk 0 | the owning rep | `APPROVAL_AUTO_APPROVED` |
+| A step approved, more remain | next role + the owning rep | `APPROVAL_REQUESTED` · `APPROVAL_STEP_ADVANCED` |
+| Fully approved / returned / rejected | the owning rep | `APPROVAL_APPROVED` · `APPROVAL_RETURNED` · `APPROVAL_REJECTED` |
+| Portal link reissued | the customer's portal contacts | `PORTAL_LINK_ISSUED` |
+| Customer comments | the owning rep | `CUSTOMER_COMMENT` |
+| Customer counters, still within reach | the owning rep | `CUSTOMER_COUNTER_OFFER` |
+| Customer counters, breaches the threshold | the owning rep **and** the role it lands on | `RE_ENTERED_APPROVAL` · `APPROVAL_REQUESTED` |
+| Customer confirms | the owning rep | `CUSTOMER_CONFIRMED` |
+| Rep replies on the thread | the customer's portal contacts | `REP_REPLIED` |
+| Order created | the owning rep; ops (MGR/FIN/ADMIN) | `ORDER_CONFIRMED` · `FULFILLMENT_PLANNED` / `BACKORDER_RAISED` |
+| Fulfillment shipped | the owning rep **and** the customer | `FULFILLMENT_SHIPPED` |
+| Backorder consolidated | the customer | `FULFILLMENT_SHIPPED` |
+| Invoice generated | the customer | `INVOICE_ISSUED` |
+| Payment recorded | FIN/ADMIN | `PAYMENT_RECEIVED` |
+| Subscription cancelled | the customer | `SUBSCRIPTION_CANCELLED` |
+| Alert nudged | the owning rep | `DEAL_HEALTH_NUDGE` |
+| Alert escalated | the Sales Manager | `DEAL_HEALTH_ESCALATION` |
+
+In every row the **actor is excluded** — nobody is told about their own action.
+
 `GET /reporting` (Phase E) also returns `avgApprovalSlaHours` (24) and
 `avgApprovalWithinSla` — the reporting dashboard highlights the average approval
 time against that target and the approval queue flags a pending item past it.

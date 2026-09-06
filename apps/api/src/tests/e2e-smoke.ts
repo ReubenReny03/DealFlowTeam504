@@ -14,13 +14,20 @@
  * change to this file beyond deleting the `pending` flag. This is the team's
  * shared progress dashboard: run it any time to see exactly what is left.
  */
-import type { Server } from 'node:http';
+import { createServer, type Server } from 'node:http';
+import { io as ioClient, type Socket } from 'socket.io-client';
 import {
   ApprovalStatus,
+  NotificationType,
   PORTAL_TOKEN_HEADER,
   RiskLevel,
   Role,
+  SOCKET_PATH,
+  SocketEvent,
+  SocketRoom,
   formatMoney,
+  type NotificationDto,
+  type RealtimeReadyPayload,
 } from '@dealflow/shared';
 import { createApp } from '../app.js';
 import { env } from '../config/env.js';
@@ -29,6 +36,7 @@ import { syncAllIndexes } from '../db/models.js';
 import { runSeed } from '../seed/seed.js';
 import { DEMO_ACCOUNTS } from '../seed/users.seed.js';
 import { PRIYA_PORTAL_TOKEN } from '../seed/modules/approvals.seed.js';
+import { closeRealtime, initRealtime } from '../realtime/server.js';
 import { log } from '../utils/logger.js';
 import { waitForMongo } from '../../../../scripts/wait-for-mongo.js';
 
@@ -117,6 +125,63 @@ async function step(
   }
 }
 
+
+/* ------------------------------------------------------------------ realtime */
+
+interface TestSocket {
+  socket: Socket;
+  frames: { event: string; payload: any }[];
+  ready: RealtimeReadyPayload;
+}
+
+/**
+ * Open a socket the way the browser does — credentials in the handshake `auth`
+ * bag, never a header — and resolve once the server has said who it thinks we
+ * are. Every frame is recorded so a step can assert on what did AND did not
+ * arrive; "nobody else was told" is half of what these tests are for.
+ */
+function openSocket(auth: Record<string, string>): Promise<TestSocket> {
+  return new Promise((resolve, reject) => {
+    const socket = ioClient(baseUrl, {
+      path: SOCKET_PATH,
+      transports: ['websocket'],
+      auth,
+      reconnection: false,
+    });
+    const frames: { event: string; payload: any }[] = [];
+    socket.onAny((event: string, payload: any) => frames.push({ event, payload }));
+    socket.on(SocketEvent.READY, (ready: RealtimeReadyPayload) =>
+      resolve({ socket, frames, ready }),
+    );
+    socket.on('connect_error', (err: Error) => reject(err));
+    setTimeout(() => reject(new Error('the socket never became ready')), 8000);
+  });
+}
+
+/** A handshake that must FAIL. Resolves with the refusal message. */
+function expectRefused(auth: Record<string, string>): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = ioClient(baseUrl, {
+      path: SOCKET_PATH,
+      transports: ['websocket'],
+      auth,
+      reconnection: false,
+    });
+    socket.on('connect_error', (err: Error) => {
+      socket.close();
+      resolve(err.message);
+    });
+    socket.on(SocketEvent.READY, () => {
+      socket.close();
+      reject(new Error('the socket was accepted when it should have been refused'));
+    });
+    setTimeout(() => reject(new Error('the handshake neither succeeded nor failed')), 8000);
+  });
+}
+
+/** Give the server a moment to fan an event out before asserting on it. */
+const settle = (ms = 600): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
 /* ------------------------------------------------------------------ the flow */
 
 async function main(): Promise<void> {
@@ -129,8 +194,12 @@ async function main(): Promise<void> {
   await runSeed({ quiet: true });
   log.ok('seeded');
 
+  // The smoke test drives the REAL server, sockets included — otherwise the
+  // realtime step would be testing a different program from the one that ships.
   const server: Server = await new Promise((resolve) => {
-    const s = createApp().listen(0, () => resolve(s));
+    const s = createServer(createApp());
+    initRealtime(s);
+    s.listen(0, () => resolve(s));
   });
   const port = (server.address() as { port: number }).port;
   baseUrl = `http://127.0.0.1:${port}`;
@@ -1228,8 +1297,169 @@ async function main(): Promise<void> {
     },
   );
 
+
+  /* ---- 21. The realtime handshake is the authorisation boundary ---- */
+  await step(
+    21,
+    'A socket is authenticated once, and its rooms are what it may ever receive',
+    'platform',
+    async () => {
+      const manager = await openSocket({ token: tokens[Role.SALES_MANAGER] });
+      const customer = await openSocket({ token: tokens['priya@acmecorp.test'] });
+
+      assert(
+        manager.ready.rooms.includes(SocketRoom.role(Role.SALES_MANAGER)) &&
+          manager.ready.rooms.includes(SocketRoom.internal),
+        `a manager must be in their role room and the internal room, got ${manager.ready.rooms.join(', ')}`,
+      );
+      assert(
+        !customer.ready.rooms.includes(SocketRoom.internal),
+        `a customer must never be in the internal room, got ${customer.ready.rooms.join(', ')}`,
+      );
+      assert(
+        customer.ready.rooms.includes(SocketRoom.customer(customer.ready.customerId!)),
+        'a customer must be in their own company room',
+      );
+
+      // No credential, and a forged one, are both refused outright — a socket
+      // that cannot say who it is has no room to be in.
+      const noCredential = await expectRefused({});
+      const forged = await expectRefused({ token: 'not-a-jwt' });
+
+      // A magic link unlocks exactly the quotation it was minted for. Mint a
+      // fresh one rather than reusing the seeded token: step 15 proves that a
+      // reissue revokes every earlier link, so by now the seeded one is dead —
+      // which is the system working, not a problem to route around.
+      const acme = await api('GET', '/quotations?q=Q-1042', { token: tokens[Role.SALES_MANAGER] });
+      const issued = await api('POST', `/quotations/${(acme.body.data as any[])[0].id}/portal-link`, {
+        token: tokens[Role.SALES_MANAGER],
+        body: { reason: 'Smoke test: realtime handshake' },
+      });
+      assert(issued.status === 200, `could not mint a portal link: ${issued.body.error?.message}`);
+      const link = await openSocket({ portalToken: issued.body.data.token });
+      assert(
+        !!link.ready.quotationId &&
+          link.ready.rooms.includes(SocketRoom.quotation(link.ready.quotationId)),
+        'a magic-link session must land in its own quotation room',
+      );
+
+      // ...and cannot talk its way into another company's deal. This is the
+      // same negative-auth case step 7 proves over REST.
+      const foreign = await api('GET', '/quotations?pageSize=100', {
+        token: tokens[Role.SALES_MANAGER],
+      });
+      const notTheirs = (foreign.body.data as any[]).find(
+        (q) => String(q.customerId) !== String(link.ready.customerId),
+      );
+      const allowed = await new Promise<boolean>((resolve) => {
+        link.socket.emit(SocketEvent.SUBSCRIBE_QUOTATION, notTheirs.id, (ok: boolean) => resolve(ok));
+        setTimeout(() => resolve(true), 3000);
+      });
+      assert(allowed === false, `a portal link must not watch ${notTheirs.number}`);
+
+      for (const s of [manager, customer, link]) s.socket.close();
+      return `rooms scoped per identity · no-credential refused ("${noCredential}") · forged token refused ("${forged}") · a link cannot watch ${notTheirs.number}`;
+    },
+  );
+
+  /* ---- 22. A business event notifies the people it concerns, live ---- */
+  await step(
+    22,
+    'Deciding an approval reaches the owning rep over the socket, and nobody else',
+    'platform',
+    async () => {
+      const queue = await api('GET', '/approvals?pendingOnly=true&pageSize=50', {
+        token: tokens[Role.SALES_MANAGER],
+      });
+      const target = (queue.body.data.items as any[]).find(
+        (a) => a.currentStage === Role.SALES_MANAGER,
+      );
+      assert(!!target, 'the seed must leave an approval sitting on the Sales Manager');
+
+      // Sign in AS THE OWNER, so we are watching the bell that should ring.
+      const users = await api('GET', '/users?pageSize=100', { token: tokens[Role.ADMIN] });
+      const owner = (users.body.data.items as any[]).find((u) => u.name === target.ownerName);
+      assert(!!owner, `no account for ${target.ownerName}`);
+      const ownerLogin = await api('POST', '/auth/login', {
+        body: { email: owner.email, password: DEMO_ACCOUNTS.find((d) => d.email === owner.email)?.password },
+      });
+      assert(ownerLogin.status === 200, `could not sign in as ${owner.email}`);
+
+      const repSocket = await openSocket({ token: ownerLogin.body.data.token });
+      const managerSocket = await openSocket({ token: tokens[Role.SALES_MANAGER] });
+      const customerSocket = await openSocket({ token: tokens['priya@acmecorp.test'] });
+
+      const decision = await api('POST', `/approvals/${target.id}/approve`, {
+        token: tokens[Role.SALES_MANAGER],
+        body: { reason: 'Smoke test: realtime delivery' },
+      });
+      assert(decision.status === 200, `approve failed: ${decision.body.error?.message}`);
+
+      await settle(900);
+
+      const notification = repSocket.frames.find((f) => f.event === SocketEvent.NOTIFICATION_NEW);
+      assert(
+        !!notification,
+        `the owning rep received no notification — frames: ${repSocket.frames.map((f) => f.event).join(', ') || 'none'}`,
+      );
+      const dto = notification!.payload as NotificationDto;
+      assert(
+        dto.type === NotificationType.APPROVAL_APPROVED ||
+          dto.type === NotificationType.APPROVAL_STEP_ADVANCED,
+        `unexpected notification type ${dto.type}`,
+      );
+      assert(!!dto.link, 'a notification must link somewhere the recipient can open');
+      assert(!!dto.severity, 'a notification must carry a severity for the UI to colour by');
+
+      assert(
+        repSocket.frames.some((f) => f.event === SocketEvent.NOTIFICATION_COUNT),
+        'the badge count must be pushed alongside the notification',
+      );
+      assert(
+        repSocket.frames.some((f) => f.event === SocketEvent.APPROVAL_UPDATED),
+        'the approval domain event must reach the owner',
+      );
+
+      // Nobody is told about their own action...
+      assert(
+        !managerSocket.frames.some((f) => f.event === SocketEvent.NOTIFICATION_NEW),
+        'the manager who decided must not be notified of their own decision',
+      );
+      // ...and an internal approval is not the customer's business.
+      assert(
+        !customerSocket.frames.some(
+          (f) =>
+            f.event === SocketEvent.NOTIFICATION_NEW || f.event === SocketEvent.APPROVAL_UPDATED,
+        ),
+        `a customer must hear nothing of an internal approval — frames: ${customerSocket.frames.map((f) => f.event).join(', ')}`,
+      );
+
+      // The push is a convenience; the row is the notification. Someone who was
+      // offline must still find it in their bell.
+      const persisted = await api('GET', '/notifications', { token: ownerLogin.body.data.token });
+      assert(
+        (persisted.body.data.items as NotificationDto[]).some((n) => n.id === dto.id),
+        'the notification must be persisted, not only pushed',
+      );
+
+      // Marking read pushes the cleared badge to this person's other tabs.
+      const secondTab = await openSocket({ token: ownerLogin.body.data.token });
+      await api('POST', '/notifications/read-all', { token: ownerLogin.body.data.token });
+      await settle(700);
+      const countFrame = secondTab.frames.find((f) => f.event === SocketEvent.NOTIFICATION_COUNT);
+      assert(
+        countFrame?.payload?.unreadCount === 0,
+        `a second tab must see the badge clear, got ${JSON.stringify(countFrame?.payload)}`,
+      );
+
+      for (const s of [repSocket, managerSocket, customerSocket, secondTab]) s.socket.close();
+      return `${target.quotationNumber} → ${target.ownerName} got "${dto.title}" (${dto.type}) · the decider and the customer got nothing · persisted and cleared across tabs`;
+    },
+  );
+
   /* ------------------------------------------------------------------ report */
 
+  await closeRealtime();
   server.close();
   await disconnectMongo();
   await mongo.stop();

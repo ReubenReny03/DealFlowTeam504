@@ -13,7 +13,7 @@ npm approve-scripts esbuild        # only if npm warns about install scripts
 
 docker compose up -d mongo         # Mongo 7 as a single-node replica set
 npm run reset                      # wipe, rebuild, seed, verify
-npm run dev                        # API on :3000, web on :4200
+npm run dev                        # API on :3000 (REST + ws /realtime), web on :4200
 ```
 
 Open **http://localhost:4200** and click any persona in the **Demo accounts**
@@ -131,6 +131,10 @@ fallback adds ~10 s for the engine to start. `npm run demo:reset` is well inside
 | `ng serve` fails with **"Project target does not exist."** | a `buildTarget` written as `web:development` — that parses as *project:target*, i.e. a target literally named `development` | it must be *project:target:configuration*: `web:build:development`. Every `buildTarget` in `angular.json` needs all three segments. |
 | Angular build: `Unexpected closing block` | `@else if (x; as y)` — unsupported | use `@else { @if (x; as y) { … } }` (D-007) |
 | Angular build: `Opening tag not terminated` on a `[class.…/…]` | a Tailwind opacity class in a class binding | `[class]="cond ? 'bg-rose-50' : ''"` |
+| The header shows an amber **Reconnecting…** chip | the socket is down — usually the API restarted, or `WEB_ORIGIN` does not match where the app is served from | the app keeps working over REST; the chip clears on its own when the API is back. If it never clears, check the browser console for the handshake error and confirm `WEB_ORIGIN` in `.env` |
+| The bell never updates but the pages do | realtime is off but REST is fine — `environment.useMocks` is on (mock mode deliberately opens no socket), or the handshake was refused | turn off mock mode; a refused handshake is logged in the console with its reason (expired token, deactivated account, revoked portal link) |
+| A socket connects then immediately drops | the JWT expired, or the account was deactivated mid-session | sign in again. This is intended: `requireAuth` and the handshake enforce the same rule, so a revoked account cannot hold a socket open |
+| Realtime works for internal users but not the portal | the portal link was revoked or reissued | a reissue revokes every live token; take the fresh URL from the reset output or from **Reissue customer link** |
 | The frontend needs an endpoint that does not exist yet | your backend counterpart is behind | set `environment.useMocks = true` and keep going |
 | `GET /api/v1/<module>/_health` says `todo: […]` | that endpoint is not built | it names the domain and the screens it serves. See `ARCHITECTURE.md`. |
 

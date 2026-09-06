@@ -246,3 +246,52 @@ because a reset password is one the holder did not choose either. Seeded demo
 logins are explicitly exempt: their passwords are published in the README, on the
 login screen and in docs/CREDENTIALS.md, so a judge changing one would make the
 published credential wrong.
+
+**D-037 — Realtime rooms are the authorisation boundary, decided once at the
+handshake.**
+A socket is authenticated when it connects, and the result is a set of rooms
+(`user:<id>`, `role:<ROLE>`, `internal`, `customer:<id>`, `quotation:<id>`). An
+emit names a room; nothing re-checks the recipient. The alternative — filtering
+at emit time — means every one of the twenty-odd emit sites has to remember who
+is entitled to what, and one that forgets leaks silently rather than failing.
+Consequences worth stating: the JWT path **re-reads the account** exactly as
+`requireAuth` does, because a deactivated user must not keep a socket open on a
+token minted before they were switched off; a socket with no credential is
+refused rather than downgraded to a read-only feed; and `subscribe:quotation` is
+authorised against the same rule as `assertPortalScope`, so guessing an id is
+not a way in.
+
+**D-038 — Domain events carry identity, not documents.**
+`quotation:updated` says *which* quotation changed and why; it does not ship the
+quotation. The screen re-reads it over REST. Pushing the record would be one
+round trip cheaper and would mean maintaining a second, subtly different copy of
+every endpoint's shaping — the role scoping in `roleScope.ts`, the pagination,
+the derived counts — inside the socket layer. Notifications are the exception
+and carry the whole `NotificationDto`, because a notification has no other
+endpoint shaping it and the bell must be able to render it with no follow-up
+call.
+
+**D-039 — A notification is a database row first and a push second.**
+`notifications.service.ts` writes the Mongo row, then emits. A user who was
+offline still finds the notification in their bell, and a socket failure never
+loses one — the service logs a delivery failure instead of throwing, because a
+notification is a courtesy on top of a business event that has already succeeded
+and been audited. Failing a customer's confirm because a manager's bell could
+not be reached would be the wrong trade in every case.
+
+**D-040 — Nobody is notified of their own action.**
+Every helper in the notification service takes the actor and drops them from the
+recipient list. It is enforced in one place rather than at each call site,
+because the call sites that would forget are exactly the ones where the actor is
+usually — but not always — the same person as the recipient. A manager who
+submits a quotation on a rep's behalf *does* notify that rep; a rep who submits
+their own does not notify themselves.
+
+**D-041 — A live screen refetches; it does not patch itself from the socket.**
+`liveRefresh()` re-runs the page's own `load()`. Patching local state from an
+event payload drifts from what the endpoint would have returned, and the drift
+only shows up under exactly the conditions that are hardest to reproduce. The
+one screen that guards the refetch is the quotation builder: an edited-but-unsaved
+draft raises the existing "reload the latest version" dialog instead of being
+overwritten, because silently discarding someone's typing to show them fresher
+data is worse than being briefly stale.

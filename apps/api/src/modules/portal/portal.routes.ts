@@ -22,6 +22,7 @@ import {
   ApprovalStepStatus,
   AuditEntity,
   NegotiationEventType,
+  NotificationType,
   QuoteStage,
   Role,
   calculateBlendedRisk,
@@ -47,6 +48,17 @@ import { listParams, pageMeta, searchFilter, stableSort } from '../../utils/list
 import { ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
+import {
+  emitApprovalUpdated,
+  emitNegotiationEvent,
+  emitQuotationUpdated,
+} from '../../realtime/emit.js';
+import {
+  approvalLink,
+  notifyRoles,
+  notifyUsers,
+  quotationLink,
+} from '../notifications/notifications.service.js';
 import { mountModuleHealth } from '../module.health.js';
 import { loadRiskConfig } from '../config/config.service.js';
 import { createOrderFromQuotation } from '../orders/orders.service.js';
@@ -280,6 +292,26 @@ portalRouter.post(
       reason: body.comment,
     });
 
+    // The rep who owns the deal hears it; nobody else needs to.
+    await notifyUsers(
+      [String(quotation.ownerId)],
+      {
+        type: NotificationType.CUSTOMER_COMMENT,
+        title: `${actor.name} commented on ${quotation.number}`,
+        body: line ? `On ${line.productName}: ${body.comment}` : body.comment,
+        link: quotationLink(quotation._id),
+        entity: AuditEntity.NEGOTIATION,
+        entityId: String(quotation._id),
+        entityLabel: quotation.number,
+      },
+      { id: actor.id, name: actor.name, role: Role.CUSTOMER },
+    );
+    emitNegotiationEvent(
+      event,
+      { id: actor.id, name: actor.name, role: Role.CUSTOMER },
+      { customerId: quotation.customerId, ownerId: quotation.ownerId },
+    );
+
     ok(res, toDto(event));
   }),
 );
@@ -351,7 +383,7 @@ portalRouter.post(
         authorId: actor.id, authorName: actor.name, fromCustomer: true, comment: body.note,
       });
     }
-    if (events.length > 0) await NegotiationEvent.insertMany(events);
+    const savedEvents = events.length > 0 ? await NegotiationEvent.insertMany(events) : [];
 
     // Re-price and re-score exactly as a rep's submit would, against the CURRENT config.
     const riskConfig = await loadRiskConfig();
@@ -435,6 +467,57 @@ portalRouter.post(
       reason: body.note?.trim() || 'Customer proposed new terms',
     });
 
+    const customerActor = { id: actor.id, name: actor.name, role: Role.CUSTOMER };
+
+    await notifyUsers(
+      [String(quotation.ownerId)],
+      {
+        type: reEnteredApproval
+          ? NotificationType.RE_ENTERED_APPROVAL
+          : NotificationType.CUSTOMER_COUNTER_OFFER,
+        title: reEnteredApproval
+          ? `${quotation.number} went back for approval`
+          : `${actor.name} proposed new terms on ${quotation.number}`,
+        body: reEnteredApproval
+          ? `The counter-offer scored ${risk.riskLevel} (${risk.riskScore}) and re-entered approval at ${risk.requiredChain.join(' → ')}. Nobody requested that review.`
+          : body.note?.trim() ||
+            `New terms are within what you can approve directly — risk ${risk.riskLevel} (${risk.riskScore}).`,
+        link: quotationLink(quotation._id),
+        entity: AuditEntity.NEGOTIATION,
+        entityId: String(quotation._id),
+        entityLabel: quotation.number,
+      },
+      customerActor,
+    );
+
+    if (reEnteredApproval) {
+      // The approval was reopened by the customer, not by a rep — so the desk it
+      // landed on has to be told, exactly as if it had been submitted.
+      await notifyRoles(
+        [risk.requiredChain[0] as Role],
+        {
+          type: NotificationType.APPROVAL_REQUESTED,
+          title: `${quotation.number} re-entered approval`,
+          body: `${actor.name} (${quotation.customerName}) countered, pushing risk to ${risk.riskLevel} (${risk.riskScore}).`,
+          link: approvalLink(quotation.approvalId),
+          entity: AuditEntity.APPROVAL,
+          entityId: String(quotation.approvalId),
+          entityLabel: quotation.number,
+        },
+        customerActor,
+      );
+      const reopened = await Approval.findById(quotation.approvalId).lean();
+      if (reopened) emitApprovalUpdated(reopened, customerActor);
+    }
+
+    for (const event of savedEvents) {
+      emitNegotiationEvent(event, customerActor, {
+        customerId: quotation.customerId,
+        ownerId: quotation.ownerId,
+      });
+    }
+    emitQuotationUpdated(quotation, 'COUNTER_OFFER_APPLIED', customerActor);
+
     const payload: PortalCounterResponse = {
       quotation: toPortalQuotationDto(quotation),
       risk,
@@ -486,6 +569,24 @@ portalRouter.post(
     // CONFIRMED (and sets orderId/version/lastActivityAt), on its own copy of
     // the document — the in-memory `quotation` above is stale otherwise.
     const confirmed = await Quotation.findById(quotation._id);
+
+    const confirmActor = { id: actor.id, name: actor.name, role: Role.CUSTOMER };
+    await notifyUsers(
+      [String(quotation.ownerId)],
+      {
+        type: NotificationType.CUSTOMER_CONFIRMED,
+        title: `${quotation.customerName} confirmed ${quotation.number}`,
+        body: order
+          ? `Order ${order.number} was created and its warehouse split is planned.`
+          : 'The quotation is confirmed.',
+        link: quotationLink(quotation._id),
+        entity: AuditEntity.QUOTATION,
+        entityId: String(quotation._id),
+        entityLabel: quotation.number,
+      },
+      confirmActor,
+    );
+    if (confirmed) emitQuotationUpdated(confirmed, 'CUSTOMER_CONFIRMED', confirmActor);
 
     const payload: PortalConfirmResponse = {
       quotation: toPortalQuotationDto(confirmed),

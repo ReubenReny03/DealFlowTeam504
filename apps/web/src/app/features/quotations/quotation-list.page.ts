@@ -3,13 +3,14 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import {
-  EMPTY_STATES, QUOTATION_WRITE_ROLES, Role, TIER_LABEL,
+  EMPTY_STATES, QUOTATION_WRITE_ROLES, Role, SocketEvent, TIER_LABEL,
   type CustomerDto, type KanbanBoardDto, type QuotationDto, type QuotationSummaryDto,
 } from '@dealflow/shared';
 import { ApiService } from '../../core/api/api.service';
 import { ListQuery } from '../../core/state/list-query';
 import { SessionStore } from '../../core/state/session.store';
 import { ToastStore } from '../../core/state/toast.store';
+import { liveRefresh } from '../../core/realtime/live-refresh';
 import {
   AgoPipe, ColumnDef, DataTableComponent, EmptyStateComponent, ErrorStateComponent,
   KanbanBoardComponent, LoadingComponent, ModalComponent, MoneyPipe, PaginatorComponent,
@@ -207,6 +208,12 @@ export class QuotationListPage implements OnInit {
     return this.view() === 'kanban'
       ? (this.board()?.columns ?? []).every((c) => c.cardCount === 0)
       : this.tableRows().length === 0;
+  }
+
+  constructor() {
+    // Screen 3's board is meant to read as a live pipeline: a card moves column
+    // when the deal moves stage, whoever moved it.
+    liveRefresh([SocketEvent.QUOTATION_UPDATED, SocketEvent.APPROVAL_UPDATED], () => void this.load());
   }
 
   ngOnInit(): void { void this.load(); }

@@ -5,6 +5,8 @@ import { FulfillmentStatus, Role, type FulfillmentDto } from '@dealflow/shared';
 import { BillingStore, FulfillmentStore } from '../../core/state/feature.stores';
 import { SessionStore } from '../../core/state/session.store';
 import { ToastStore } from '../../core/state/toast.store';
+import { liveRefresh } from '../../core/realtime/live-refresh';
+import { SocketEvent } from '@dealflow/shared';
 import {
   ErrorStateComponent, LoadingComponent, ModalComponent, MoneyPipe,
   ShortDatePipe, StatusChipComponent,
@@ -238,6 +240,12 @@ export class FulfillmentDetailPage implements OnInit {
     for (const s of this.store.stock()) byId.set(s.warehouseId, s.warehouseName);
     return [...byId.entries()].map(([id, name]) => ({ id, name }));
   });
+
+  constructor() {
+    liveRefresh([SocketEvent.FULFILLMENT_UPDATED], () => this.reload(), {
+      when: (e) => e.fulfillmentId === this.id(),
+    });
+  }
 
   ngOnInit(): void {
     void this.store.loadOne(this.id());

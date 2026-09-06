@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { SocketEvent } from '@dealflow/shared';
 import { ErrorStateComponent, LoadingComponent, ShortDatePipe } from '../shared/ui';
+import { liveRefresh } from '../core/realtime/live-refresh';
 import { PortalStore } from './portal.store';
 
 /** The portal's Messages tab: the whole negotiation, in order. */
@@ -80,6 +82,12 @@ import { PortalStore } from './portal.store';
 })
 export class PortalMessagesPage implements OnInit {
   protected readonly store = inject(PortalStore);
+  constructor() {
+    // A rep's reply should appear in the thread the customer is reading, not the
+    // next time they navigate back to it.
+    liveRefresh([SocketEvent.NEGOTIATION_EVENT], () => this.reload());
+  }
+
   ngOnInit(): void {
     if (!this.store.data()) void this.store.load();
     void this.store.loadList();

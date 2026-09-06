@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { AuditEntity, NegotiationEventType, Role } from '@dealflow/shared';
+import { AuditEntity, NegotiationEventType, NotificationType, Role } from '@dealflow/shared';
 import { NegotiationEvent, Quotation } from '../../db/models.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
@@ -9,6 +9,8 @@ import { notFound } from '../../utils/apiError.js';
 import { ok } from '../../utils/respond.js';
 import { toDto } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
+import { emitNegotiationEvent } from '../../realtime/emit.js';
+import { notifyCustomer, portalLink } from '../notifications/notifications.service.js';
 import { mountModuleHealth } from '../module.health.js';
 import { mountReadonly } from '../readonly.factory.js';
 
@@ -53,6 +55,28 @@ async function reply(req: any, res: any): Promise<void> {
   await writeAudit({
     actor, action: 'REP_REPLIED', entity: AuditEntity.NEGOTIATION,
     entityId: String(quotation._id), entityLabel: quotation.number, reason: body.comment,
+  });
+
+  // The customer's side of the same thread. The link is a PORTAL route: a
+  // customer must never be handed an internal one they cannot open.
+  await notifyCustomer(
+    String(quotation.customerId),
+    {
+      type: NotificationType.REP_REPLIED,
+      title: `${actor.name} replied on ${quotation.number}`,
+      body: body.counterDiscountPct != null
+        ? `${body.comment} (counter: ${body.counterDiscountPct}%)`
+        : body.comment,
+      link: portalLink(quotation.number),
+      entity: AuditEntity.NEGOTIATION,
+      entityId: String(quotation._id),
+      entityLabel: quotation.number,
+    },
+    actor,
+  );
+  emitNegotiationEvent(event, actor, {
+    customerId: quotation.customerId,
+    ownerId: quotation.ownerId,
   });
 
   ok(res, toDto(event));

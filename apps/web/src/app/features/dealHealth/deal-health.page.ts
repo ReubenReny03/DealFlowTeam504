@@ -3,6 +3,8 @@ import { Router } from '@angular/router';
 import { AlertType, EMPTY_STATES, type DealAlertDto } from '@dealflow/shared';
 import { DealHealthStore } from '../../core/state/feature.stores';
 import { ToastStore } from '../../core/state/toast.store';
+import { liveRefresh } from '../../core/realtime/live-refresh';
+import { SocketEvent } from '@dealflow/shared';
 import {
   EmptyStateComponent, ErrorStateComponent, KpiTileComponent, LoadingComponent, PaginatorComponent,
   SearchBoxComponent, ShortDatePipe,
@@ -108,6 +110,12 @@ export class DealHealthPage implements OnInit {
   private readonly router = inject(Router);
   private readonly toast = inject(ToastStore);
   protected readonly empty = EMPTY_STATES['dealHealth'];
+
+  constructor() {
+    // A manager and an admin often watch this together; a nudge from one has to
+    // show as "Nudge sent" on the other's screen.
+    liveRefresh([SocketEvent.ALERT_UPDATED], () => this.reload());
+  }
 
   ngOnInit(): void { void this.store.load(); }
   reload(): void { void this.store.load(); }

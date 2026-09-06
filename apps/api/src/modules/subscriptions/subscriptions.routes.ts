@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import {
   AuditEntity,
+  NotificationType,
   SubscriptionStatus,
   Role,
   cancellationSettlement,
@@ -22,6 +23,8 @@ import { listParams, pageMeta, searchFilter, stableSort } from '../../utils/list
 import { ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
+import { emitSubscriptionUpdated } from '../../realtime/emit.js';
+import { notifyCustomer } from '../notifications/notifications.service.js';
 import { mountModuleHealth } from '../module.health.js';
 
 export const subscriptionsRouter = Router();
@@ -252,6 +255,21 @@ subscriptionsRouter.post(
       after: { creditAmount: settlement.creditAmount, serviceEndsAt: settlement.serviceEndsAt },
       reason: body.reason,
     });
+
+    await notifyCustomer(
+      String(sub.customerId),
+      {
+        type: NotificationType.SUBSCRIPTION_CANCELLED,
+        title: `${sub.planName} cancelled`,
+        body: settlement.explanation,
+        link: '/portal/quotations',
+        entity: AuditEntity.SUBSCRIPTION,
+        entityId: String(sub._id),
+        entityLabel: sub.number,
+      },
+      actor,
+    );
+    emitSubscriptionUpdated(sub, actor);
 
     const payload: CancelSubscriptionResponse = {
       subscription: toDto(sub),

@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, OnChanges, OnInit, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnChanges, OnInit, computed, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { CATEGORY_LABEL } from '@dealflow/shared';
+import { CATEGORY_LABEL, SocketEvent } from '@dealflow/shared';
 import { ToastStore } from '../core/state/toast.store';
+import { liveRefresh, watchQuotation } from '../core/realtime/live-refresh';
 import { AgoPipe, LoadingComponent, MoneyPipe, ShortDatePipe, StatusChipComponent } from '../shared/ui';
 import { PortalStore } from './portal.store';
 
@@ -224,6 +225,18 @@ export class PortalQuotationPage implements OnInit, OnChanges {
 
   /** `undefined` = nothing opened yet; `null` = "whichever quotation the session defaults to". */
   private openedFor: string | null | undefined = undefined;
+
+  constructor() {
+    // This is the live half of the portal ↔ rep loop. The customer is reading a
+    // page their account manager may be editing: a rep's reply, an approval
+    // clearing, a stage change all land here without a refresh.
+    watchQuotation(computed(() => this.store.quotation()?.id ?? null));
+    liveRefresh(
+      [SocketEvent.QUOTATION_UPDATED, SocketEvent.NEGOTIATION_EVENT],
+      () => void this.store.load(this.store.quotation()?.number),
+      { when: (e) => !e.quotationId || e.quotationId === this.store.quotation()?.id },
+    );
+  }
 
   // The switcher navigates between /portal/q/:number without leaving the page,
   // so the route parameter — not just the first render — drives what is loaded.

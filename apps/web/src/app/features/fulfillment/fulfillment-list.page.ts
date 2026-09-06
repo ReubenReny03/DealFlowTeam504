@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/cor
 import { Router } from '@angular/router';
 import { EMPTY_STATES } from '@dealflow/shared';
 import { FulfillmentStore } from '../../core/state/feature.stores';
+import { liveRefresh } from '../../core/realtime/live-refresh';
+import { SocketEvent } from '@dealflow/shared';
 import {
   EmptyStateComponent, ErrorStateComponent, LoadingComponent, PaginatorComponent,
   SearchBoxComponent, StatusChipComponent,
@@ -117,6 +119,15 @@ export class FulfillmentListPage implements OnInit {
   protected readonly store = inject(FulfillmentStore);
   private readonly router = inject(Router);
   protected readonly empty = EMPTY_STATES['fulfillment'];
+
+  constructor() {
+    // Screen 7 shows live stock beside the orders waiting on it, so a shipment
+    // anyone books changes both halves of what is on screen.
+    liveRefresh(
+      [SocketEvent.FULFILLMENT_UPDATED, SocketEvent.ORDER_UPDATED, SocketEvent.STOCK_UPDATED],
+      () => this.reload(),
+    );
+  }
 
   ngOnInit(): void { void this.store.load(); }
   reload(): void { void this.store.load(); }

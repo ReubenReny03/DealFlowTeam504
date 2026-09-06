@@ -1,16 +1,21 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { SessionStore } from '../core/state/session.store';
+import { NotificationBellComponent } from '../shared/ui/notification-bell.component';
 
 /**
  * The customer portal shell — a deliberately different surface.
  * Three items, no internal navigation, no way back into the workspace. A
  * customer signed in here can reach their own company's quotations and nothing else.
+ *
+ * The bell is the same component the internal shell uses, and that is safe:
+ * notifications are written per user and pushed to that user's own room, so a
+ * customer's bell can only ever contain a customer's notifications.
  */
 @Component({
   selector: 'df-portal-shell',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, NotificationBellComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="min-h-screen bg-white">
@@ -23,12 +28,17 @@ import { SessionStore } from '../core/state/session.store';
               <p class="text-xs text-slate-500">Shared with you by your account manager</p>
             </div>
           </div>
-          @if (session.user()?.name && session.user()?.name !== 'Guest') {
-            <div class="text-right leading-tight">
-              <p class="text-sm font-medium text-slate-800">{{ session.user()?.name }}</p>
-              <button type="button" class="text-xs text-slate-500 hover:text-slate-800" (click)="session.logout()">Sign out</button>
-            </div>
-          }
+          <div class="flex items-center gap-3">
+            <!-- A customer hears about their own deals too: a reply from their rep,
+                 an approved quotation, an invoice, a shipment. -->
+            <df-notification-bell />
+            @if (session.user()?.name && session.user()?.name !== 'Guest') {
+              <div class="text-right leading-tight">
+                <p class="text-sm font-medium text-slate-800">{{ session.user()?.name }}</p>
+                <button type="button" class="text-xs text-slate-500 hover:text-slate-800" (click)="session.logout()">Sign out</button>
+              </div>
+            }
+          </div>
         </div>
         <nav class="mx-auto max-w-4xl px-6">
           <ul class="flex gap-1">

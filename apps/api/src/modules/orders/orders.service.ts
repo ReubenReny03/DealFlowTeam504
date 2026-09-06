@@ -18,12 +18,13 @@ import {
   FulfillmentStatus,
   InvoiceStatus,
   InvoiceType,
+  NotificationType,
   OrderStatus,
   ProrationRule,
   QuoteStage,
+  Role,
   SubscriptionStatus,
   buildBillingSchedule,
-  type Role,
 } from '@dealflow/shared';
 import {
   Fulfillment,
@@ -36,6 +37,16 @@ import {
 } from '../../db/models.js';
 import { invalidState, notFound } from '../../utils/apiError.js';
 import { writeAudit } from '../../utils/audit.js';
+import {
+  emitFulfillmentUpdated,
+  emitOrderUpdated,
+  emitQuotationUpdated,
+} from '../../realtime/emit.js';
+import {
+  fulfillmentLink,
+  notifyRoles,
+  notifyUsers,
+} from '../notifications/notifications.service.js';
 import { loadConfig } from '../config/config.service.js';
 import { planAndApply } from '../fulfillment/fulfillment.service.js';
 
@@ -224,6 +235,48 @@ export async function createOrderFromQuotation(quotationId: string, actor: Order
     after: { quotationNumber: quotation.number, lines: orderLines.length, subscriptions: subscriptionCount },
     reason: 'Quotation confirmed',
   });
+
+  // The order exists and its warehouse split is already planned, so the people
+  // who have to act on it are told now, not when someone next opens screen 8.
+  const backordered = (fulfillment.backorders as any[]).length > 0;
+  await notifyUsers(
+    [String(quotation.ownerId)],
+    {
+      type: NotificationType.ORDER_CONFIRMED,
+      title: `${order.number} created from ${quotation.number}`,
+      body: `${quotation.customerName} confirmed. ${stockable.length} line(s) to fulfil${
+        subscriptionCount > 0 ? `, ${subscriptionCount} subscription(s) started` : ''
+      }.`,
+      link: fulfillmentLink(fulfillment._id),
+      entity: AuditEntity.ORDER,
+      entityId: String(order._id),
+      entityLabel: order.number,
+    },
+    actor,
+  );
+  // There is no WAREHOUSE role in this system — fulfillment is worked by the
+  // same people who can write it (see fulfillment.routes.ts `WRITE`).
+  await notifyRoles(
+    [Role.SALES_MANAGER, Role.FINANCE, Role.ADMIN],
+    {
+      type: backordered ? NotificationType.BACKORDER_RAISED : NotificationType.FULFILLMENT_PLANNED,
+      title: backordered
+        ? `${order.number} is partly on backorder`
+        : `${order.number} is ready to pick`,
+      body: backordered
+        ? `${(fulfillment.backorders as any[]).length} line(s) could not be covered from stock.`
+        : `${fulfillment.totalShipments} shipment(s) planned for ${order.customerName}.`,
+      link: fulfillmentLink(fulfillment._id),
+      entity: AuditEntity.FULFILLMENT,
+      entityId: String(fulfillment._id),
+      entityLabel: order.number,
+    },
+    actor,
+  );
+
+  emitOrderUpdated(order, actor);
+  emitFulfillmentUpdated(fulfillment, actor);
+  emitQuotationUpdated(quotation, 'ORDER_CREATED', actor);
 
   return { order, fulfillment };
 }

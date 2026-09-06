@@ -15,6 +15,7 @@ import {
   ApprovalStepStatus,
   AuditEntity,
   KANBAN_STAGES,
+  NotificationType,
   QUOTATION_WRITE_ROLES,
   QuoteStage,
   Role,
@@ -57,6 +58,15 @@ import { listParams, pageMeta, searchFilter, stableSort } from '../../utils/list
 import { created, ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
+import { emitApprovalUpdated, emitQuotationUpdated } from '../../realtime/emit.js';
+import {
+  approvalLink,
+  notifyCustomer,
+  notifyRoles,
+  notifyUsers,
+  portalLink,
+  quotationLink,
+} from '../notifications/notifications.service.js';
 import { mountModuleHealth } from '../module.health.js';
 import { loadRiskConfig } from '../config/config.service.js';
 import { priceLinesForCustomer } from '../pricing/pricing.service.js';
@@ -615,6 +625,43 @@ quotationsRouter.post(
       reason,
     });
 
+    if (autoApproved) {
+      // Nothing landed on anyone's desk, so the rep is the only one who needs
+      // to hear that the deal cleared on its own.
+      await notifyUsers(
+        [String(doc.ownerId)],
+        {
+          type: NotificationType.APPROVAL_AUTO_APPROVED,
+          title: `${doc.number} auto-approved`,
+          body: `Blended risk scored 0, so no approval was required. ${doc.customerName} can be sent the quotation.`,
+          link: quotationLink(doc._id),
+          entity: AuditEntity.QUOTATION,
+          entityId: String(doc._id),
+          entityLabel: doc.number,
+        },
+        actor,
+      );
+    } else {
+      // Only the role holding the ACTIVE step is told. Notifying the whole chain
+      // up front would put a Finance row in someone's bell days before it is
+      // theirs to act on.
+      await notifyRoles(
+        [approval.currentStage as Role],
+        {
+          type: NotificationType.APPROVAL_REQUESTED,
+          title: `${doc.number} needs your approval`,
+          body: `${actor.name} submitted ${doc.customerName} — ${doc.totals.grandTotal} ${doc.currency}, risk ${risk.riskLevel} (${risk.riskScore}).`,
+          link: approvalLink(approval._id),
+          entity: AuditEntity.APPROVAL,
+          entityId: String(approval._id),
+          entityLabel: doc.number,
+        },
+        actor,
+      );
+      emitApprovalUpdated(approval, actor);
+    }
+    emitQuotationUpdated(doc, action, actor);
+
     const payload: SubmitQuotationResponse = {
       quotation: toQuotationDto(doc),
       approval: autoApproved ? null : toDto(approval),
@@ -683,6 +730,20 @@ quotationsRouter.post(
       after: { revokedCount: revoked.modifiedCount ?? 0, expiresAt: expiresAt.toISOString() },
       reason: reason?.trim() || 'Customer portal link reissued',
     });
+
+    await notifyCustomer(
+      String(doc.customerId),
+      {
+        type: NotificationType.PORTAL_LINK_ISSUED,
+        title: `${doc.number} is ready for you to review`,
+        body: `${req.user!.name} sent you a fresh link to ${doc.number}. It expires ${expiresAt.toDateString()}.`,
+        link: portalLink(doc.number),
+        entity: AuditEntity.QUOTATION,
+        entityId: String(doc._id),
+        entityLabel: doc.number,
+      },
+      { id: req.user!.id, name: req.user!.name, role: req.user!.role },
+    );
 
     const payload: ReissuePortalLinkResponse = {
       token,

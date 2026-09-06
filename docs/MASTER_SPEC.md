@@ -441,7 +441,6 @@ immediately before the judged demo.
 
 From `FEATURE_PRIORITY.md` P3, and worth saying out loud in the demo:
 
-- **Socket.IO** for live portal ↔ rep sync (a refresh proves the loop today)
 - **Email delivery** of quotation links
 - **Multi-company / multi-tenant** — a bonus in the brief, not a requirement
 - **Variant-level stock** — stock is per product per warehouse today

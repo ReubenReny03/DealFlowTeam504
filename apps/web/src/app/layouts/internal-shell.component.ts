@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { APP_NAME, ROLE_LABEL } from '@dealflow/shared';
 import { SessionStore } from '../core/state/session.store';
-// Notification bell hidden for now — see df-notification-bell usage below.
-// import { NotificationBellComponent } from '../shared/ui/notification-bell.component';
+import { RealtimeService } from '../core/realtime/realtime.service';
+import { NotificationBellComponent } from '../shared/ui/notification-bell.component';
 
 /**
  * The internal workspace shell. Top navigation is exactly the mockup's:
@@ -17,7 +17,7 @@ import { SessionStore } from '../core/state/session.store';
 @Component({
   selector: 'df-internal-shell',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive /*, NotificationBellComponent */],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, NotificationBellComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="min-h-screen bg-slate-50">
@@ -54,7 +54,19 @@ import { SessionStore } from '../core/state/session.store';
                 >Back-end</a
               >
             }
-            <!-- <df-notification-bell /> -->
+            <!-- Realtime health. Only ever visible when something is wrong: a live
+                 socket needs no announcement, but a dead one has to explain why
+                 the screen stopped updating rather than looking merely quiet. -->
+            @if (!realtime.isLive()) {
+              <span
+                class="hidden items-center gap-1.5 rounded-full bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 sm:inline-flex"
+                [attr.title]="realtime.lastError() ?? 'Reconnecting to the live feed…'"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                {{ realtime.status() === 'offline' ? 'Offline' : 'Reconnecting…' }}
+              </span>
+            }
+            <df-notification-bell />
             <div class="flex items-center gap-2">
               <span
                 class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 ring-2 ring-white/80"
@@ -84,6 +96,7 @@ import { SessionStore } from '../core/state/session.store';
 })
 export class InternalShellComponent {
   protected readonly session = inject(SessionStore);
+  protected readonly realtime = inject(RealtimeService);
   protected readonly appName = APP_NAME;
   roleLabel(): string {
     const role = this.session.role();

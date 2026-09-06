@@ -151,9 +151,19 @@ A follow-up sweep found a few things beyond C and D's own scope that were still 
 - [x] #37 Avg-approval-time SLA highlighting (E) — `APPROVAL_SLA_HOURS` constant; reporting returns `avgApprovalWithinSla`; the KPI tile colours green/rose and the approval queue shows an "⚠ over SLA" chip
 - [x] #38 Merge-prompt UX on stale version (E) — the interceptor stops toasting `409 STALE_VERSION`; screen 4 shows a proper "reload the latest version" dialog with the local edits kept visible behind it
 
+## Realtime (post-Phase E)
+
+- [x] Socket.IO on the API's own HTTP server at `/realtime`; JWT **and** portal-token handshakes, rooms decided once at connect time (`apps/api/src/realtime/`)
+- [x] `notifications.service.ts` — the single producer; every business event now notifies (approvals, portal comment / counter / confirm, rep reply, order, shipment, backorder, invoice, payment, subscription cancel, deal-health nudge & escalation). The actor is always excluded
+- [x] `NotificationDto` typed by `NotificationType`, plus `severity` / `entity` / `actorName`; the bell colours and groups by them
+- [x] The notification bell is back in the internal shell (it had been commented out because nothing but the deal-health nudge ever wrote a notification) and is now in the **portal** shell too
+- [x] `notifications.seed.ts` — 72 notifications derived from the seeded approvals, alerts, negotiation events and invoices, so the bell agrees with the screens on a fresh reset
+- [x] Live screens via `liveRefresh()`: dashboard, quotation list/board, quotation detail, approval list & detail, deal health, fulfillment list & detail, invoice list, portal quotation & messages
+- [x] Connection state surfaced — an amber "Reconnecting…" chip in the header and a live dot in the bell, so a dead socket cannot pass for a quiet afternoon
+
 ## P3 — explicitly out of scope, nothing to do
 
-Sockets, email delivery, multi-tenant, drag-and-drop persistence,
+Email delivery, multi-tenant, drag-and-drop persistence,
 variant-level stock, forecasting, approval delegation — all correctly
 deferred per `DECISIONS.md`.
 
@@ -195,7 +205,8 @@ are untouched.
 - [x] Cross-module contract tests #1–#11 all green — 7 as smoke steps, 4 already automated
 - [ ] Full demo script rehearsal (`DEMO_SCRIPT.md`) — every endpoint and screen is live and exercised by `npm run verify`; an actual timed click-through against the running app and the eight screenshot fallbacks are a person-with-the-app task, not done here
 
-**Bottom line:** every domain and the hardening pass are complete.
+**Bottom line:** every domain and the hardening pass are complete, and
+real-time is now shipped rather than deferred.
 Every P0/P1/P2 row on this board is done or a documented deliberate non-goal
-(sockets, email delivery, field-level merge UI). The only outstanding item is a
+(email delivery, field-level merge UI). The only outstanding item is a
 human demo rehearsal — nothing in code.

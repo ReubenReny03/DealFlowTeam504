@@ -1,7 +1,10 @@
+import { createServer } from 'node:http';
+import { SOCKET_PATH } from '@dealflow/shared';
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { connectMongo } from './db/connection.js';
 import { syncAllIndexes } from './db/models.js';
+import { initRealtime } from './realtime/server.js';
 import { log } from './utils/logger.js';
 import { waitForMongo } from '../../../scripts/wait-for-mongo.js';
 
@@ -32,10 +35,16 @@ async function bootstrap(): Promise<void> {
     process.exit(1);
   }
 
-  createApp().listen(env.port, () => {
+  // The Express app stays frozen; realtime rides on the same HTTP server rather
+  // than opening a second port, so one origin and one CORS rule cover both.
+  const server = createServer(createApp());
+  initRealtime(server);
+
+  server.listen(env.port, () => {
     log.ok(`API listening on http://localhost:${env.port}${env.apiBasePath}`);
     log.ok(`Health:  http://localhost:${env.port}${env.apiBasePath}/health`);
     log.ok(`Routes:  http://localhost:${env.port}${env.apiBasePath}/_routes`);
+    log.ok(`Realtime: ws://localhost:${env.port}${SOCKET_PATH}`);
   });
 }
 

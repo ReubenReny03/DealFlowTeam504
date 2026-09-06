@@ -6,6 +6,7 @@
  * that keeps loading and error states consistent on all 18 screens.
  */
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 import type {
   ApprovalChainConfigDto,
@@ -24,8 +25,15 @@ import type {
   ReportingDashboardDto,
   SubscriptionListDto,
 } from '@dealflow/shared';
+import {
+  NOTIFICATION_SEVERITY,
+  SocketEvent,
+  type NotificationCountPayload,
+} from '@dealflow/shared';
+import { RealtimeService } from '../realtime/realtime.service';
 import { ApiService } from './api-token';
 import { ListQuery } from './list-query';
+import { ToastStore } from './toast.store';
 
 /** Small helper so every store gets identical loading/error handling. */
 function loader<T>(fn: () => Promise<T>) {
@@ -453,15 +461,63 @@ export class AdminConfigStore {
  * refreshed after any action that writes a notification (a nudge, an escalate).
  * No sockets — a manual refresh and post-action reload is the P2 contract.
  */
+/** How many rows the bell keeps in memory. It is a panel, not an inbox. */
+const NOTIFICATION_WINDOW = 20;
+
 @Injectable({ providedIn: 'root' })
 export class NotificationStore {
   private readonly api = inject(ApiService);
+  private readonly realtime = inject(RealtimeService);
+  private readonly toast = inject(ToastStore);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly list = signal<NotificationListDto | null>(null);
 
   readonly items = computed<NotificationDto[]>(() => this.list()?.items ?? []);
   readonly unreadCount = computed(() => this.list()?.unreadCount ?? 0);
+
+  constructor() {
+    // A notification arrives on its own, so the bell is never a poller and never
+    // waits for the next page load to show what already happened.
+    this.realtime
+      .on<NotificationDto>(SocketEvent.NOTIFICATION_NEW)
+      .pipe(takeUntilDestroyed())
+      .subscribe((n) => this.receive(n));
+
+    // The badge is pushed separately: marking one read in another tab has to
+    // move this tab's count without re-sending the row itself.
+    this.realtime
+      .on<NotificationCountPayload>(SocketEvent.NOTIFICATION_COUNT)
+      .pipe(takeUntilDestroyed())
+      .subscribe(({ unreadCount }) =>
+        this.list.update((l) => (l ? { ...l, unreadCount } : { items: [], unreadCount })),
+      );
+  }
+
+  /**
+   * Fold a pushed notification into the panel.
+   *
+   * The server may push a row this tab already has (a reconnect replays
+   * nothing, but a second tab's action can echo), so an id already present is
+   * replaced rather than duplicated.
+   */
+  private receive(n: NotificationDto): void {
+    this.list.update((l) => {
+      const existing = l?.items ?? [];
+      const known = existing.some((x) => x.id === n.id);
+      const items = known
+        ? existing.map((x) => (x.id === n.id ? n : x))
+        : [n, ...existing].slice(0, NOTIFICATION_WINDOW);
+      const unreadCount = (l?.unreadCount ?? 0) + (known || n.read ? 0 : 1);
+      return { items, unreadCount };
+    });
+
+    // Anything urgent enough to be CRITICAL interrupts; the rest waits in the
+    // bell. A toast for every routine event would train people to dismiss them.
+    const severity = n.severity ?? NOTIFICATION_SEVERITY[n.type];
+    if (severity === 'CRITICAL') this.toast.error(n.title, n.body);
+    else if (severity === 'WARNING') this.toast.info(n.title, n.body);
+  }
 
   async load(): Promise<void> {
     this.loading.set(true);

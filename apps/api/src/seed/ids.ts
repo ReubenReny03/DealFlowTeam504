@@ -33,6 +33,7 @@ export const G = {
   CREDITNOTE: 'd3',
   ALERT: 'e1',
   AUDIT: 'e2',
+  NOTIFICATION: 'e3',
   HISTORY: 'f1',
 } as const;
 

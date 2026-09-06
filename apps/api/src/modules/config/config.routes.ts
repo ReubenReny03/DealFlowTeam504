@@ -28,6 +28,7 @@ import { notFound } from '../../utils/apiError.js';
 import { ok } from '../../utils/respond.js';
 import { toDto } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
+import { emitConfigUpdated } from '../../realtime/emit.js';
 import { mountModuleHealth } from '../module.health.js';
 import { loadConfig, toRiskConfig } from './config.service.js';
 
@@ -177,6 +178,13 @@ configRouter.put(
       before: { tierCeilings: before.tierCeilings, categoryCeilings: before.categoryCeilings, thresholds: before.thresholds },
       after: { tierCeilings: toDto(doc).tierCeilings, categoryCeilings: toDto(doc).categoryCeilings, thresholds: toDto(doc).thresholds },
       reason: body.reason,
+    });
+
+    // Everyone internal is looking at numbers that just changed underneath them.
+    emitConfigUpdated({
+      impactedApprovals: reevaluated.length,
+      actorId: req.user!.id,
+      actorName: req.user!.name,
     });
 
     const payload: ConfigChangeImpactDto = { config: toDto(doc), reevaluated };

@@ -242,7 +242,6 @@ _"Same quote, different number, because the rules changed."_
 
 _(Have this ready — it is worth thirty seconds if you are asked.)_
 
-- Real-time portal ↔ rep sync over websockets — a refresh proves the loop today
 - Email delivery of quotation links
 - Multi-company support — an explicit bonus in the brief
 - Variant-level stock, rather than per product per warehouse

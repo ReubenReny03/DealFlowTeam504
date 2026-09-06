@@ -11,6 +11,7 @@ import {
   ApprovalStatus,
   ApprovalStepStatus,
   AuditEntity,
+  NotificationType,
   QuoteStage,
   Role,
   type ApprovalListDto,
@@ -25,6 +26,13 @@ import { ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
 import { approvalScopeFor } from '../../utils/roleScope.js';
+import { emitApprovalUpdated, emitQuotationUpdated } from '../../realtime/emit.js';
+import {
+  approvalLink,
+  notifyRoles,
+  notifyUsers,
+  quotationLink,
+} from '../notifications/notifications.service.js';
 import { mountModuleHealth } from '../module.health.js';
 
 export const approvalsRouter = Router();
@@ -201,6 +209,58 @@ approvalsRouter.post(
       );
     }
 
+    if (fullyApproved) {
+      // The rep gets the answer they have been waiting on.
+      await notifyUsers(
+        [String(approval.ownerId)],
+        {
+          type: NotificationType.APPROVAL_APPROVED,
+          title: `${approval.quotationNumber} approved`,
+          body: `${actor.name} cleared the last step. ${reason}`,
+          link: quotationLink(approval.quotationId),
+          entity: AuditEntity.QUOTATION,
+          entityId: String(approval.quotationId),
+          entityLabel: approval.quotationNumber,
+        },
+        actor,
+      );
+    } else {
+      // The next desk in the chain is told the moment the one before it clears,
+      // rather than discovering the work on their next refresh.
+      await notifyRoles(
+        [approval.currentStage as Role],
+        {
+          type: NotificationType.APPROVAL_REQUESTED,
+          title: `${approval.quotationNumber} needs your approval`,
+          body: `${actor.name} (${actor.role}) approved their step — ${approval.customerName}, ${approval.amount} ${approval.currency}.`,
+          link: approvalLink(approval._id),
+          entity: AuditEntity.APPROVAL,
+          entityId: String(approval._id),
+          entityLabel: approval.quotationNumber,
+        },
+        actor,
+      );
+      await notifyUsers(
+        [String(approval.ownerId)],
+        {
+          type: NotificationType.APPROVAL_STEP_ADVANCED,
+          title: `${approval.quotationNumber} moved to ${approval.currentStage}`,
+          body: `${actor.name} approved the ${actor.role} step. It now sits with ${approval.assignedToName ?? approval.currentStage}.`,
+          link: quotationLink(approval.quotationId),
+          entity: AuditEntity.APPROVAL,
+          entityId: String(approval._id),
+          entityLabel: approval.quotationNumber,
+        },
+        actor,
+      );
+    }
+
+    emitApprovalUpdated(approval, actor);
+    if (fullyApproved) {
+      const quotation = await Quotation.findById(approval.quotationId).lean();
+      if (quotation) emitQuotationUpdated(quotation, 'APPROVED', actor);
+    }
+
     await writeAudit({
       actor,
       action: fullyApproved ? 'APPROVED' : 'APPROVED_STEP',
@@ -254,6 +314,24 @@ approvalsRouter.post(
       { _id: approval.quotationId },
       { $set: { stage: QuoteStage.DRAFT, lastActivityAt: now }, $inc: { version: 1 } },
     );
+
+    await notifyUsers(
+      [String(approval.ownerId)],
+      {
+        type: NotificationType.APPROVAL_RETURNED,
+        title: `${approval.quotationNumber} returned for revision`,
+        body: `${actor.name} (${actor.role}): ${reason}`,
+        link: quotationLink(approval.quotationId),
+        entity: AuditEntity.QUOTATION,
+        entityId: String(approval.quotationId),
+        entityLabel: approval.quotationNumber,
+      },
+      actor,
+    );
+
+    emitApprovalUpdated(approval, actor);
+    const returned = await Quotation.findById(approval.quotationId).lean();
+    if (returned) emitQuotationUpdated(returned, 'RETURNED_FOR_REVISION', actor);
 
     await writeAudit({
       actor,
@@ -310,6 +388,24 @@ approvalsRouter.post(
       { _id: approval.quotationId },
       { $set: { stage: QuoteStage.REJECTED, lastActivityAt: now }, $inc: { version: 1 } },
     );
+
+    await notifyUsers(
+      [String(approval.ownerId)],
+      {
+        type: NotificationType.APPROVAL_REJECTED,
+        title: `${approval.quotationNumber} was rejected`,
+        body: `${actor.name} (${actor.role}): ${reason}`,
+        link: quotationLink(approval.quotationId),
+        entity: AuditEntity.QUOTATION,
+        entityId: String(approval.quotationId),
+        entityLabel: approval.quotationNumber,
+      },
+      actor,
+    );
+
+    emitApprovalUpdated(approval, actor);
+    const rejected = await Quotation.findById(approval.quotationId).lean();
+    if (rejected) emitQuotationUpdated(rejected, 'REJECTED', actor);
 
     await writeAudit({
       actor,

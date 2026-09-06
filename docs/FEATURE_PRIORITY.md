@@ -108,7 +108,6 @@ worth more than half-building one.
 
 | Feature | Why not now |
 |---|---|
-| Socket.IO real-time portal ↔ rep sync | A refresh demonstrates the loop just as well. Sockets cost 4h and add a failure mode on stage. |
 | Email delivery of quotation links | The link is the artefact; delivering it is plumbing, not product. |
 | Multi-company / multi-tenant | An explicit bonus in the brief, not a requirement. Touches every query. |
 | Kanban drag-and-drop persistence | The stage is decided by the workflow, not by dragging. Dragging would *lie* about the model. |

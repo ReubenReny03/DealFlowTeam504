@@ -4,6 +4,8 @@ import { firstValueFrom } from 'rxjs';
 import { Role, type SalesDashboardDto } from '@dealflow/shared';
 import { ApiService } from '../../core/api/api.service';
 import { SessionStore } from '../../core/state/session.store';
+import { liveRefresh } from '../../core/realtime/live-refresh';
+import { SocketEvent } from '@dealflow/shared';
 import {
   AgoPipe, EmptyStateComponent, ErrorStateComponent, KpiTileComponent,
   LoadingComponent, MoneyPipe, StatusChipComponent,
@@ -104,6 +106,15 @@ export class DashboardPage implements OnInit {
   protected readonly canApprove = computed(() =>
     ([Role.SALES_MANAGER, Role.FINANCE, Role.ADMIN] as Role[]).includes(this.session.role() as Role),
   );
+
+  constructor() {
+    // The landing screen is the one most likely to be left open on a second
+    // monitor, so it is the one that most needs to stop being a snapshot.
+    liveRefresh(
+      [SocketEvent.QUOTATION_UPDATED, SocketEvent.APPROVAL_UPDATED, SocketEvent.ORDER_UPDATED],
+      () => void this.load(),
+    );
+  }
 
   ngOnInit(): void { void this.load(); }
 

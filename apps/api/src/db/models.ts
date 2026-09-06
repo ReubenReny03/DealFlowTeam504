@@ -26,6 +26,8 @@ import {
   InvoiceType,
   LineDiscountStatus,
   NegotiationEventType,
+  NotificationSeverity,
+  NotificationType,
   OrderStatus,
   PaymentMethod,
   PriceRuleType,
@@ -450,15 +452,23 @@ negotiationEventSchema.index({ quotationId: 1, createdAt: 1 });
 const notificationSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    type: String,
+    type: { type: String, enum: vals(NotificationType), required: true },
     title: String,
     body: String,
     link: String,
     read: { type: Boolean, default: false },
+    severity: { type: String, enum: vals(NotificationSeverity), default: NotificationSeverity.INFO },
+    entity: { type: String, enum: vals(AuditEntity) },
+    entityId: String,
+    entityLabel: String,
+    actorName: String,
   },
   opts,
 );
 notificationSchema.index({ userId: 1, read: 1, createdAt: -1 });
+// The bell's own query: newest first, scoped to one person. Without this the
+// list scans every notification in the system to find one user's twenty.
+notificationSchema.index({ userId: 1, createdAt: -1 });
 
 /* ------------------------------------------------------------------ order & fulfillment */
 

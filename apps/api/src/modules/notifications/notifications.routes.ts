@@ -14,6 +14,7 @@ import { asyncHandler } from '../../utils/asyncHandler.js';
 import { forbidden, notFound } from '../../utils/apiError.js';
 import { ok, paginate } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
+import { syncUnreadCount } from './notifications.service.js';
 import { mountModuleHealth } from '../module.health.js';
 
 export const notificationsRouter = Router();
@@ -79,6 +80,9 @@ notificationsRouter.patch(
       throw forbidden('This notification does not belong to you.');
     doc.read = true;
     await doc.save();
+    // The same person may have the app open in three tabs. Pushing the count
+    // keeps every one of their bells agreeing without any of them polling.
+    await syncUnreadCount(req.user!.id);
     ok(res, toDto(doc));
   }),
 );
@@ -92,6 +96,7 @@ notificationsRouter.post(
       { userId: req.user!.id, read: false },
       { $set: { read: true } },
     );
+    await syncUnreadCount(req.user!.id);
     ok(res, { updated: result.modifiedCount ?? 0 });
   }),
 );

@@ -5,6 +5,7 @@ import {
   AuditEntity,
   InvoiceStatus,
   InvoiceType,
+  NotificationType,
   OrderStatus,
   PaymentMethod,
   Role,
@@ -23,6 +24,12 @@ import { ok } from '../../utils/respond.js';
 import { toDto, toDtoList } from '../../utils/serialize.js';
 import { writeAudit } from '../../utils/audit.js';
 import { toCsv } from '../../utils/csv.js';
+import { emitInvoiceUpdated, emitOrderUpdated } from '../../realtime/emit.js';
+import {
+  invoiceLink,
+  notifyCustomer,
+  notifyRoles,
+} from '../notifications/notifications.service.js';
 import { mountModuleHealth } from '../module.health.js';
 import { loadConfig } from '../config/config.service.js';
 
@@ -224,6 +231,23 @@ invoicesRouter.post(
       reason: `Invoice raised for the shipped quantity of ${order.number}`,
     });
 
+    const issueActor = { id: req.user!.id, name: req.user!.name, role: req.user!.role };
+    await notifyCustomer(
+      String(invoice.customerId),
+      {
+        type: NotificationType.INVOICE_ISSUED,
+        title: `Invoice ${invoice.number} is ready`,
+        body: `${invoice.total} ${invoice.currency} for ${order.number}, due ${new Date(invoice.dueDate).toDateString()}.`,
+        link: '/portal/quotations',
+        entity: AuditEntity.INVOICE,
+        entityId: String(invoice._id),
+        entityLabel: invoice.number,
+      },
+      issueActor,
+    );
+    emitInvoiceUpdated(invoice, issueActor);
+    emitOrderUpdated(order, issueActor);
+
     return ok(
       res,
       {
@@ -299,6 +323,27 @@ invoicesRouter.post(
       after: { amount: body.amount, method: body.method, status: invoice.status },
       reason: body.reference ? `Payment received, ref ${body.reference}` : 'Payment received',
     });
+
+    const payActor = { id: req.user!.id, name: req.user!.name, role: req.user!.role };
+    // Finance is told by whoever recorded it — but the person who recorded it is
+    // usually Finance, and `notifyUsers` already drops the actor from their own news.
+    await notifyRoles(
+      [Role.FINANCE, Role.ADMIN],
+      {
+        type: NotificationType.PAYMENT_RECEIVED,
+        title:
+          invoice.status === InvoiceStatus.PAID
+            ? `${invoice.number} paid in full`
+            : `Part payment on ${invoice.number}`,
+        body: `${body.amount} ${invoice.currency} from ${invoice.customerName} by ${body.method}. ${invoice.amountDue} still outstanding.`,
+        link: invoiceLink(invoice._id),
+        entity: AuditEntity.INVOICE,
+        entityId: String(invoice._id),
+        entityLabel: invoice.number,
+      },
+      payActor,
+    );
+    emitInvoiceUpdated(invoice, payActor);
 
     ok(res, toDto(invoice));
   }),

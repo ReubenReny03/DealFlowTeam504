@@ -4,6 +4,7 @@
  * serialised as a string `id`; Mongo Dates are always serialised as ISO-8601 UTC strings.
  * FROZEN after Phase 3 — see docs/CONTRACT_CHANGELOG.md.
  */
+import type { NotificationSeverity, NotificationType } from '../realtime.js';
 import type {
   AlertSeverity,
   AlertStatus,
@@ -729,12 +730,20 @@ export interface DealAlertDto extends Timestamped {
 export interface NotificationDto {
   id: Id;
   userId: Id;
-  type: string;
+  type: NotificationType;
   title: string;
   body: string;
   link?: string;
   read: boolean;
   createdAt: IsoDate;
+  /** How loudly to say it. Absent on rows written before severity existed. */
+  severity?: NotificationSeverity;
+  /** What the notification is *about*, so the bell can group and de-duplicate. */
+  entity?: AuditEntity;
+  entityId?: Id;
+  entityLabel?: string;
+  /** Who caused it. Never the recipient — nobody is told about their own action. */
+  actorName?: string;
 }
 
 /* ------------------------------------------------------------------ activity feed */

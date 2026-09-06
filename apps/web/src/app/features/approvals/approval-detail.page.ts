@@ -19,6 +19,8 @@ import {
 import { ApprovalStore } from '../../core/state/feature.stores';
 import { SessionStore } from '../../core/state/session.store';
 import { ToastStore } from '../../core/state/toast.store';
+import { liveRefresh } from '../../core/realtime/live-refresh';
+import { SocketEvent } from '@dealflow/shared';
 import {
   ConfirmDialogComponent,
   ErrorStateComponent,
@@ -285,6 +287,14 @@ export class ApprovalDetailPage implements OnInit {
   protected readonly pendingAction = signal<'approve' | 'return' | 'reject' | null>(null);
   protected readonly reissuing = signal(false);
   protected readonly reissuedLink = signal<ReissuePortalLinkResponse | null>(null);
+
+  constructor() {
+    // Two approvers can open the same row. The one who did not decide it sees
+    // the decision land rather than discovering it on a failed submit.
+    liveRefresh([SocketEvent.APPROVAL_UPDATED], () => this.reload(), {
+      when: (e) => e.approvalId === this.id(),
+    });
+  }
 
   ngOnInit(): void {
     void this.store.loadOne(this.id());

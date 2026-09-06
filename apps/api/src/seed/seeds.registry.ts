@@ -34,6 +34,7 @@ import { seedRepeatBusiness } from './modules/repeatBusiness.seed.js';
 import { seedBilling } from './modules/billing.seed.js';
 import { seedAlerts } from './modules/alerts.seed.js';
 import { seedReportingHistory } from './modules/history.seed.js';
+import { seedNotifications } from './modules/notifications.seed.js';
 
 /** ---- APPEND A SEED MODULE BELOW THIS LINE, ONE LINE ONLY ---- */
 export const SEED_MODULES: SeedModule[] = [
@@ -50,6 +51,7 @@ export const SEED_MODULES: SeedModule[] = [
   { name: 'billing',           order: 100, domain: 'billing', run: seedBilling },
   { name: 'alerts',            order: 120, domain: 'analytics', run: seedAlerts },
   { name: 'reportingHistory',  order: 110, domain: 'analytics', run: seedReportingHistory },
+  { name: 'notifications',     order: 130, domain: 'portal', run: seedNotifications },
 ];
 
 export function orderedSeedModules(): SeedModule[] {

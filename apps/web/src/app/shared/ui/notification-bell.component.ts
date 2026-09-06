@@ -1,7 +1,13 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import type { NotificationDto } from '@dealflow/shared';
+import {
+  NOTIFICATION_ICON,
+  NOTIFICATION_SEVERITY,
+  type NotificationDto,
+  type NotificationSeverity,
+} from '@dealflow/shared';
 import { NotificationStore } from '../../core/state/feature.stores';
+import { RealtimeService } from '../../core/realtime/realtime.service';
 import { AgoPipe } from '../pipes/date.pipes';
 import { EmptyStateComponent } from './empty-state.component';
 
@@ -10,6 +16,15 @@ import { EmptyStateComponent } from './empty-state.component';
  * panel lists the signed-in user's nudges and escalations, each linking to the
  * deal it concerns and marking itself read on the way. "Mark all read" clears
  * the badge in one call.
+ *
+ * The list arrives over the socket, so the badge moves while the user is
+ * looking at it. `load()` still runs on open — a socket that dropped and came
+ * back missed whatever happened in between, and the panel is the one place that
+ * has to be right when someone is reading it.
+ *
+ * The dot beside the header tells you whether that is currently true: green
+ * while the socket is live, amber while it is reconnecting. Without it, a dead
+ * connection and a quiet afternoon look identical.
  */
 @Component({
   selector: 'df-notification-bell',
@@ -46,7 +61,15 @@ import { EmptyStateComponent } from './empty-state.component';
           class="df-scale-in absolute right-0 z-50 mt-2 w-80 origin-top-right overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
         >
           <div class="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
-            <p class="text-sm font-semibold text-slate-800">Notifications</p>
+            <p class="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+              Notifications
+              <span
+                class="h-1.5 w-1.5 rounded-full"
+                [class.bg-emerald-500]="realtime.isLive()"
+                [class.bg-amber-400]="!realtime.isLive()"
+                [attr.title]="realtime.isLive() ? 'Live' : 'Reconnecting…'"
+              ></span>
+            </p>
             @if (store.unreadCount() > 0) {
               <button
                 type="button"
@@ -77,14 +100,18 @@ import { EmptyStateComponent } from './empty-state.component';
                       [class.bg-brand-50]="!n.read"
                       (click)="openNotification(n)"
                     >
-                      <span class="flex items-center gap-2">
+                      <span class="flex items-start gap-2">
+                        <span aria-hidden="true" class="mt-0.5 text-sm leading-none">{{ icon(n) }}</span>
+                        <span class="flex-1 text-sm font-medium text-slate-800">{{ n.title }}</span>
                         @if (!n.read) {
-                          <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600"></span>
+                          <span
+                            class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                            [class]="dotClass(n)"
+                          ></span>
                         }
-                        <span class="text-sm font-medium text-slate-800">{{ n.title }}</span>
                       </span>
-                      <span class="text-xs leading-snug text-slate-500">{{ n.body }}</span>
-                      <span class="text-[11px] text-slate-400">{{ n.createdAt | ago }}</span>
+                      <span class="pl-6 text-xs leading-snug text-slate-500">{{ n.body }}</span>
+                      <span class="pl-6 text-[11px] text-slate-400">{{ n.createdAt | ago }}</span>
                     </button>
                   </li>
                 }
@@ -98,8 +125,25 @@ import { EmptyStateComponent } from './empty-state.component';
 })
 export class NotificationBellComponent implements OnInit {
   protected readonly store = inject(NotificationStore);
+  protected readonly realtime = inject(RealtimeService);
   private readonly router = inject(Router);
   protected readonly open = signal(false);
+
+  /** The emoji for the notification's type. Rows written before typing fall back. */
+  protected icon(n: NotificationDto): string {
+    return NOTIFICATION_ICON[n.type] ?? '🔔';
+  }
+
+  /** Unread dot, tinted by how much the notification wants attention. */
+  protected dotClass(n: NotificationDto): string {
+    const severity: NotificationSeverity = n.severity ?? NOTIFICATION_SEVERITY[n.type] ?? 'INFO';
+    return {
+      CRITICAL: 'bg-rose-600',
+      WARNING: 'bg-amber-500',
+      SUCCESS: 'bg-emerald-500',
+      INFO: 'bg-brand-600',
+    }[severity];
+  }
 
   ngOnInit(): void {
     void this.store.load();
