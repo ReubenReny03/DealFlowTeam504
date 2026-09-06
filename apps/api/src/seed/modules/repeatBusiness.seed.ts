@@ -51,7 +51,9 @@ export async function seedRepeatBusiness(ctx: SeedContext): Promise<void> {
     const secondary = PRODUCTS[(i + 1) % PRODUCTS.length];
 
     const orderId = fid(G.ORDER, 2000 + i);
-    const quotationNumber = `Q-${3000 + i}`;
+    // Numbered from 9500 up so these can never collide with the live app's
+    // own `nextSeq`-generated Q-/ORD-/INV- numbers, which start at 2000.
+    const quotationNumber = `Q-${9500 + i}`;
 
     const built = buildQuotation({
       _id: fid(G.QUOTATION, 3000 + i),
@@ -88,7 +90,7 @@ export async function seedRepeatBusiness(ctx: SeedContext): Promise<void> {
     const isPaid = i % 5 !== 4; // 4 of every 5 are fully paid
 
     orders.push({
-      _id: orderId, number: `ORD-${2000 + i}`,
+      _id: orderId, number: `ORD-${9500 + i}`,
       quotationId: built.doc._id, quotationNumber,
       customerId: cust.id, customerName: cust.name, ownerId: rep.id,
       currency: 'USD', status: isPaid ? OrderStatus.PAID : OrderStatus.INVOICED,
@@ -107,7 +109,7 @@ export async function seedRepeatBusiness(ctx: SeedContext): Promise<void> {
 
     const totalQty = built.doc.lines.reduce((a: number, l: any) => a + l.qty, 0);
     fulfillments.push({
-      _id: fid(G.FULFILLMENT, 2000 + i), orderId, orderNumber: `ORD-${2000 + i}`,
+      _id: fid(G.FULFILLMENT, 2000 + i), orderId, orderNumber: `ORD-${9500 + i}`,
       customerId: cust.id, customerName: cust.name,
       status: FulfillmentStatus.SHIPPED,
       allocations: [
@@ -124,9 +126,9 @@ export async function seedRepeatBusiness(ctx: SeedContext): Promise<void> {
     });
 
     invoices.push({
-      _id: fid(G.INVOICE, 2000 + i), number: `INV-${2000 + i}`, type: InvoiceType.ONE_TIME,
+      _id: fid(G.INVOICE, 2000 + i), number: `INV-${9500 + i}`, type: InvoiceType.ONE_TIME,
       customerId: cust.id, customerName: cust.name,
-      orderId, orderNumber: `ORD-${2000 + i}`,
+      orderId, orderNumber: `ORD-${9500 + i}`,
       currency: 'USD', status: isPaid ? InvoiceStatus.PAID : InvoiceStatus.ISSUED,
       lines: oneTime,
       subtotal, taxTotal: tax, total,

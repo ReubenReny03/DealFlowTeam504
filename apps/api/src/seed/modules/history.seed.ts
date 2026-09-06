@@ -22,10 +22,12 @@ import type { SeedContext } from '../context.js';
 const PRODUCTS = [P.laptop, P.dock, P.mouse, P.warranty, P.setup];
 
 /**
- * Bulk filler on top of the 13 named/hero quotations. Numbered from 2000 up
+ * Bulk filler on top of the 13 named/hero quotations. Numbered from 9000 up
  * (not 800, as originally) so raising this count can never collide with the
- * named quotations (1029-1046) or the idle/anomaly specials below
- * (1021/1024/1026).
+ * named quotations (1029-1046), the idle/anomaly specials below
+ * (1021/1024/1026), OR the live app's own quotation numbering — `nextSeq`
+ * (`apps/api/src/db/models.ts`) hands out real, user-created quotations
+ * starting at Q-2000.
  */
 const HISTORY_COUNT = 300;
 /** Approval cycle times in hours. Mean is 6.4 -> screen 15's "Avg Approval Time". */
@@ -55,7 +57,7 @@ export async function seedReportingHistory(ctx: SeedContext): Promise<void> {
 
     const built = buildQuotation({
       _id: fid(G.HISTORY, i + 1),
-      number: `Q-${2000 + i}`,
+      number: `Q-${9000 + i}`,
       customerId: cust.id, customerName: cust.name, tier: cust.tier,
       priceListId: cust.pl, priceList: cust.rule,
       ownerId: rep.id, ownerName: rep.name,
