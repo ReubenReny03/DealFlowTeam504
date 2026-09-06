@@ -315,10 +315,10 @@ async function main(): Promise<void> {
         !recurring.lines.some((l: any) => oneTimeProducts.includes(l.productId)),
         'the recurring invoice must never repeat a one-time line',
       );
-      const subs = await api('GET', '/subscriptions', { token: tokens[Role.FINANCE] });
+      const subs = await api('GET', '/subscriptions?pageSize=100', { token: tokens[Role.FINANCE] });
       assert(
-        subs.body.data.counts.active === 16,
-        `expected 16 active subscriptions, got ${subs.body.data.counts.active}`,
+        subs.body.data.counts.active === 53,
+        `expected 53 active subscriptions, got ${subs.body.data.counts.active}`,
       );
       const carePlan = subs.body.data.items.find(
         (s: any) => s.planName === 'Care Plan 2yr' && s.customerName === 'Acme Corp',
@@ -686,7 +686,7 @@ async function main(): Promise<void> {
 
     // The contract: `meta` always carries the four pagination fields, a page is
     // never longer than pageSize, and `total` counts the whole filtered set —
-    // not the page. 149 seeded quotations must never arrive in one response.
+    // not the page. The full seeded quotation set must never arrive in one response.
     const lists: { path: string; token: string; rows: (body: any) => any[] }[] = [
       { path: '/quotations', token: rep, rows: (b) => b.data },
       { path: '/approvals', token: finance, rows: (b) => b.data.items },

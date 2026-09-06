@@ -4,8 +4,8 @@ import type { ApiMeta } from '@dealflow/shared';
 /**
  * The search-and-pagination state every list screen shares.
  *
- * Searching and paging are server-side throughout — 149 seeded quotations must
- * never arrive in one response — so the same three parameters (`q`, `page`,
+ * Searching and paging are server-side throughout — the full seeded quotation
+ * set must never arrive in one response — so the same three parameters (`q`, `page`,
  * `pageSize`) travel on every list request. This holds them, keeps `total` in
  * step with the response `meta`, and enforces the one rule that is easy to get
  * wrong by hand: a new search term always resets to page 1, or the user lands

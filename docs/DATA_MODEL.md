@@ -408,15 +408,22 @@ After `npm run reset`:
 
 | Collection | Docs | | Collection | Docs |
 |---|---|---|---|---|
-| User | 7 | | Quotation | 149 |
-| Customer | 6 | | Approval | 17 |
-| Product | 10 | | Order | 3 |
-| PriceList | 3 | | Fulfillment | 3 |
-| Warehouse | 2 | | Subscription | 21 (16 active / 2 paused / 3 cancelled) |
-| Stock | 8 | | Invoice | 3 |
+| User | 8 (7 demo logins + 1 deactivated) | | Quotation | 376 |
+| Customer | 6 | | Approval | 45 |
+| Product | 10 | | Order | 63 |
+| PriceList | 3 | | Fulfillment | 63 |
+| Warehouse | 2 | | Subscription | 71 (53 active / 6 paused / 12 cancelled) |
+| Stock | 8 | | Invoice | 63 |
 | SubscriptionPlan | 4 | | DealAlert | 8 (5 stalled / 2 anomalies / 1 slippage) |
 | ProductPairing | 7 | | AuditLog | 10 |
 | ApprovalChainConfig | 1 | | PortalToken | 3 (two live, one expired) |
+
+The 6 customers and 10 products stay fixed as master data; `Quotation`,
+`Order`, `Fulfillment`, `Invoice` and `Subscription` carry bulk generated
+"repeat business" history on top of the 13 named/hero quotations and 3 named
+orders (`apps/api/src/seed/modules/history.seed.ts` and
+`repeatBusiness.seed.ts`), so every list and dashboard screen has real volume
+behind it rather than a handful of rows.
 
 Enough that all 18 screens are non-empty on first run, and small enough that a
 full reset finishes in seconds.

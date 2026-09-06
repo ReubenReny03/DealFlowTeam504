@@ -208,9 +208,9 @@ export class QuotationListPage implements OnInit {
   ngOnInit(): void { void this.load(); }
 
   /**
-   * Loads whichever view is showing. The table is paged server-side — 149 seeded
-   * quotations must never arrive in one response — while the board fetches its
-   * stage columns with the same search term applied.
+   * Loads whichever view is showing. The table is paged server-side — the full
+   * seeded quotation set must never arrive in one response — while the board
+   * fetches its stage columns with the same search term applied.
    */
   async load(): Promise<void> {
     this.loading.set(true);

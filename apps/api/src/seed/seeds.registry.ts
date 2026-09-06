@@ -30,6 +30,7 @@ import { seedSubscriptionPlans } from './modules/plans.seed.js';
 import { seedQuotations } from './modules/quotations.seed.js';
 import { seedApprovalsAndAudit } from './modules/approvals.seed.js';
 import { seedOrdersAndFulfillment } from './modules/fulfillment.seed.js';
+import { seedRepeatBusiness } from './modules/repeatBusiness.seed.js';
 import { seedBilling } from './modules/billing.seed.js';
 import { seedAlerts } from './modules/alerts.seed.js';
 import { seedReportingHistory } from './modules/history.seed.js';
@@ -45,6 +46,7 @@ export const SEED_MODULES: SeedModule[] = [
   { name: 'quotations',        order: 70,  domain: 'quotations', run: seedQuotations },
   { name: 'approvals+audit',   order: 80,  domain: 'approvals', run: seedApprovalsAndAudit },
   { name: 'orders+fulfillment',order: 90,  domain: 'inventory', run: seedOrdersAndFulfillment },
+  { name: 'repeatBusiness',    order: 95,  domain: 'inventory', run: seedRepeatBusiness },
   { name: 'billing',           order: 100, domain: 'billing', run: seedBilling },
   { name: 'alerts',            order: 120, domain: 'analytics', run: seedAlerts },
   { name: 'reportingHistory',  order: 110, domain: 'analytics', run: seedReportingHistory },

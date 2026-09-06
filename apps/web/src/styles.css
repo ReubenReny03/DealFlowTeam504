@@ -127,3 +127,14 @@
 .df-scroll-x::-webkit-scrollbar { height: 6px; width: 6px; }
 .df-scroll-x::-webkit-scrollbar-track { background: transparent; }
 .df-scroll-x::-webkit-scrollbar-thumb { background-color: theme('colors.slate.300'); border-radius: 9999px; }
+
+/* Same idea, vertical — a bounded panel (e.g. the login screen's demo-account
+   list) that scrolls internally instead of stretching the page to fit it. */
+.df-scroll-y {
+  @apply overflow-y-auto;
+  scrollbar-width: thin;
+  scrollbar-color: theme('colors.slate.500') transparent;
+}
+.df-scroll-y::-webkit-scrollbar { width: 6px; }
+.df-scroll-y::-webkit-scrollbar-track { background: transparent; }
+.df-scroll-y::-webkit-scrollbar-thumb { background-color: theme('colors.slate.500'); border-radius: 9999px; }

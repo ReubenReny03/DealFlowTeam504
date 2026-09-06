@@ -24,7 +24,7 @@ import { Invoice, Order, Subscription } from '../../db/models.js';
 import { G, IDS, fid } from '../ids.js';
 import type { SeedContext } from '../context.js';
 
-/** Filler subscriptions so screen 9's chips read 16 Active / 2 Paused / 3 Cancelled. */
+/** Filler subscriptions so the subscriptions screen carries real Active/Paused/Cancelled volume. */
 const FILLER_CUSTOMERS = [
   ['beta', 'Beta Industries'], ['delta', 'Delta LLC'], ['novus', 'Novus Retail'],
   ['zenith', 'Zenith Co'], ['orion', 'Orion Ltd'], ['acme', 'Acme Corp'],
@@ -103,7 +103,7 @@ export async function seedBilling(ctx: SeedContext): Promise<void> {
     },
   ];
 
-  // Filler so the chips read 16 Active / 2 Paused / 3 Cancelled.
+  // Filler so the subscriptions screen carries real volume, not just the 4 named rows.
   const plans = [
     [IDS.plans.carePlan2yr, 'Care Plan 2yr', IDS.products.carePlan2yr, BillingCycle.MONTHLY, money(46)],
     [IDS.plans.carePlan1yr, 'Care Plan 1yr', IDS.products.carePlan1yr, BillingCycle.MONTHLY, money(28)],
@@ -112,9 +112,9 @@ export async function seedBilling(ctx: SeedContext): Promise<void> {
   ] as const;
 
   const targets = [
-    ...Array<SubscriptionStatus>(13).fill(SubscriptionStatus.ACTIVE),   // 3 named active + 13 = 16
-    ...Array<SubscriptionStatus>(1).fill(SubscriptionStatus.PAUSED),    // 1 named paused +  1 =  2
-    ...Array<SubscriptionStatus>(3).fill(SubscriptionStatus.CANCELLED),
+    ...Array<SubscriptionStatus>(50).fill(SubscriptionStatus.ACTIVE),   // 3 named active + 50 = 53
+    ...Array<SubscriptionStatus>(5).fill(SubscriptionStatus.PAUSED),    // 1 named paused +  5 =  6
+    ...Array<SubscriptionStatus>(12).fill(SubscriptionStatus.CANCELLED),
   ];
 
   targets.forEach((status, i) => {

@@ -1,5 +1,5 @@
 /** Product references shared by the quotation, order and billing seeds. */
-import { BillingCycle, ProductCategory, money } from '@dealflow/shared';
+import { BillingCycle, CustomerTier, ProductCategory, money } from '@dealflow/shared';
 import { IDS } from './ids.js';
 import type { SeedPriceListRef, SeedProductRef } from './build.js';
 import { PriceRuleType } from '@dealflow/shared';
@@ -26,3 +26,23 @@ export const PRICE_LISTS: Record<string, SeedPriceListRef> = {
   SILVER: { ruleType: PriceRuleType.PERCENT_OFF_BASE, ruleValue: 5 },
   GOLD: { ruleType: PriceRuleType.PERCENT_OFF_BASE, ruleValue: 10 },
 };
+
+/**
+ * The 6 customers, referenced by the bulk quotation/order generators
+ * (`history.seed.ts`, `repeatBusiness.seed.ts`) so filler data cycles through
+ * real accounts instead of inventing new ones.
+ */
+export const CUSTOMERS = [
+  { id: IDS.customers.acme, name: 'Acme Corp', tier: CustomerTier.GOLD, pl: IDS.priceLists.gold, rule: PRICE_LISTS.GOLD },
+  { id: IDS.customers.beta, name: 'Beta Industries', tier: CustomerTier.SILVER, pl: IDS.priceLists.silver, rule: PRICE_LISTS.SILVER },
+  { id: IDS.customers.delta, name: 'Delta LLC', tier: CustomerTier.BRONZE, pl: IDS.priceLists.bronze, rule: PRICE_LISTS.BRONZE },
+  { id: IDS.customers.novus, name: 'Novus Retail', tier: CustomerTier.SILVER, pl: IDS.priceLists.silver, rule: PRICE_LISTS.SILVER },
+  { id: IDS.customers.zenith, name: 'Zenith Co', tier: CustomerTier.GOLD, pl: IDS.priceLists.gold, rule: PRICE_LISTS.GOLD },
+  { id: IDS.customers.orion, name: 'Orion Ltd', tier: CustomerTier.GOLD, pl: IDS.priceLists.gold, rule: PRICE_LISTS.GOLD },
+];
+
+/** The 2 sales reps, same reuse rationale as `CUSTOMERS` above. */
+export const REPS = [
+  { id: IDS.users.rao, name: 'J. Rao' },
+  { id: IDS.users.nair, name: 'S. Nair' },
+];

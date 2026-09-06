@@ -1,46 +1,37 @@
 /**
- * Historical volume, so the reporting KPIs on screen 15 ("146 quotes this month",
+ * Historical volume, so the reporting KPIs on screen 15 ("N quotes this month",
  * "avg approval time 6.4 hours", "top upsell product") are computed from real
- * documents rather than hardcoded. Also seeds four extra idle open quotations so
- * screen 14's Stalled Deals tile reads 5, exactly as the mockup does.
+ * documents rather than hardcoded, and every quotation/reporting/deal-health
+ * screen reads like a busy, live tenant rather than a handful of rows. Also
+ * seeds four extra idle open quotations so screen 14's Stalled Deals tile
+ * reads 5, exactly as the mockup does.
  */
 import {
   ApprovalAction,
   ApprovalStatus,
   ApprovalStepStatus,
-  CustomerTier,
   QuoteStage,
   Role,
 } from '@dealflow/shared';
 import { Approval, Quotation } from '../../db/models.js';
 import { G, IDS, fid } from '../ids.js';
-import { P, PRICE_LISTS } from '../catalog.js';
+import { CUSTOMERS, P, REPS } from '../catalog.js';
 import { buildQuotation } from '../build.js';
 import type { SeedContext } from '../context.js';
-
-const CUSTOMERS = [
-  { id: IDS.customers.acme, name: 'Acme Corp', tier: CustomerTier.GOLD, pl: IDS.priceLists.gold, rule: PRICE_LISTS.GOLD },
-  { id: IDS.customers.beta, name: 'Beta Industries', tier: CustomerTier.SILVER, pl: IDS.priceLists.silver, rule: PRICE_LISTS.SILVER },
-  { id: IDS.customers.delta, name: 'Delta LLC', tier: CustomerTier.BRONZE, pl: IDS.priceLists.bronze, rule: PRICE_LISTS.BRONZE },
-  { id: IDS.customers.novus, name: 'Novus Retail', tier: CustomerTier.SILVER, pl: IDS.priceLists.silver, rule: PRICE_LISTS.SILVER },
-  { id: IDS.customers.zenith, name: 'Zenith Co', tier: CustomerTier.GOLD, pl: IDS.priceLists.gold, rule: PRICE_LISTS.GOLD },
-  { id: IDS.customers.orion, name: 'Orion Ltd', tier: CustomerTier.GOLD, pl: IDS.priceLists.gold, rule: PRICE_LISTS.GOLD },
-];
-
-const REPS = [
-  { id: IDS.users.rao, name: 'J. Rao' },
-  { id: IDS.users.nair, name: 'S. Nair' },
-];
 
 const PRODUCTS = [P.laptop, P.dock, P.mouse, P.warranty, P.setup];
 
 /**
- * Quotes already created in the named seeds; the history tops the month up to 146.
- * Kept in step with the named set (13 quotations) so the seeded volume stays 149.
+ * Bulk filler on top of the 13 named/hero quotations. Numbered from 2000 up
+ * (not 800, as originally) so raising this count can never collide with the
+ * named quotations (1029-1046) or the idle/anomaly specials below
+ * (1021/1024/1026).
  */
-const HISTORY_COUNT = 133;
+const HISTORY_COUNT = 300;
 /** Approval cycle times in hours. Mean is 6.4 -> screen 15's "Avg Approval Time". */
 const CYCLE_HOURS = [2.1, 3.5, 4.0, 5.2, 6.0, 6.4, 7.1, 8.3, 9.0, 10.2, 11.0, 4.0];
+/** How many history quotes carry a completed Approval — cycles through CYCLE_HOURS. */
+const APPROVAL_SAMPLE_COUNT = 40;
 
 export async function seedReportingHistory(ctx: SeedContext): Promise<void> {
   const quotations: any[] = [];
@@ -64,7 +55,7 @@ export async function seedReportingHistory(ctx: SeedContext): Promise<void> {
 
     const built = buildQuotation({
       _id: fid(G.HISTORY, i + 1),
-      number: `Q-${800 + i}`,
+      number: `Q-${2000 + i}`,
       customerId: cust.id, customerName: cust.name, tier: cust.tier,
       priceListId: cust.pl, priceList: cust.rule,
       ownerId: rep.id, ownerName: rep.name,
@@ -89,10 +80,12 @@ export async function seedReportingHistory(ctx: SeedContext): Promise<void> {
     });
     quotations.push(built.doc);
 
-    // 12 of them carry a completed approval, giving the Avg Approval Time KPI real data.
-    if (i < CYCLE_HOURS.length) {
+    // The first APPROVAL_SAMPLE_COUNT of them carry a completed approval, giving
+    // the Avg Approval Time KPI real data. Cycles through CYCLE_HOURS so the
+    // documented 6.4h mean holds regardless of how many samples are taken.
+    if (i < APPROVAL_SAMPLE_COUNT) {
       const submittedAt = ctx.daysAgo(daysBack);
-      const decidedAt = new Date(submittedAt.getTime() + CYCLE_HOURS[i] * 3_600_000);
+      const decidedAt = new Date(submittedAt.getTime() + CYCLE_HOURS[i % CYCLE_HOURS.length] * 3_600_000);
       approvals.push({
         _id: fid(G.HISTORY, 500 + i),
         quotationId: built.doc._id, quotationNumber: built.doc.number,
