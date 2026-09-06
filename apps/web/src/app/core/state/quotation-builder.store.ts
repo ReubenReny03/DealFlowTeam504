@@ -182,7 +182,11 @@ export class QuotationBuilderStore {
 
   /** Adding an upsell is an ordinary line add — the margin moves in the same tick. */
   addProduct(product: ProductDto, qty = 1, fromUpsell = false): void {
-    const id = `tmp-${product.id}-${Date.now()}`;
+    // A plain Date.now() suffix can collide if the same product is added twice
+    // within the same millisecond (a fast double-click, or "Add to Quote" plus a
+    // manual add) — setDiscount()/setQty() match by id and update every line that
+    // shares it, so a collision here silently links two unrelated lines together.
+    const id = `tmp-${product.id}-${crypto.randomUUID()}`;
     this.draftLines.update((lines) => [
       ...lines,
       {

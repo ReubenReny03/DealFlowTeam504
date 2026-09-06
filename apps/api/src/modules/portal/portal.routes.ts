@@ -173,7 +173,7 @@ portalRouter.get(
       countCompanyQuotations(req),
     ]);
     const payload: PortalResolveResponse = {
-      quotation: toDto(quotation),
+      quotation: toPortalQuotationDto(quotation),
       customer: toDto(customer),
       events: toDtoList(events),
       canConfirm: [QuoteStage.APPROVED, QuoteStage.NEGOTIATION].includes(quotation.stage),
@@ -229,6 +229,24 @@ function toLineDoc(l: PricedLine) {
 async function resolveAssignee(role: Role): Promise<string | undefined> {
   const user = await User.findOne({ role, active: true }).lean();
   return (user as any)?.name;
+}
+
+/**
+ * Mirrors `toQuotationDto` in quotations.routes.ts. The embedded line's identity
+ * field is `lineId` in Mongoose (its subschema has `_id: false`), but every wire
+ * DTO — and the portal page — addresses a line by `.id`. Without this, `toDto()`
+ * has no `_id` to rename on a line and every line comes back with `id: undefined`,
+ * which collapses every line's comment/counter box onto the same object key.
+ */
+function toPortalQuotationDto(doc: unknown) {
+  const dto = toDto<any>(doc);
+  if (Array.isArray(dto.lines)) {
+    dto.lines = dto.lines.map((l: any) => {
+      const { lineId, ...rest } = l;
+      return { id: lineId, ...rest };
+    });
+  }
+  return dto;
 }
 
 const commentSchema = z.object({ lineId: z.string().optional(), comment: z.string().trim().min(1, 'A comment is required.') });
@@ -418,7 +436,7 @@ portalRouter.post(
     });
 
     const payload: PortalCounterResponse = {
-      quotation: toDto(quotation),
+      quotation: toPortalQuotationDto(quotation),
       risk,
       reEnteredApproval,
       approval: approvalDto,
@@ -467,7 +485,7 @@ portalRouter.post(
     });
 
     const payload: PortalConfirmResponse = {
-      quotation: toDto(quotation),
+      quotation: toPortalQuotationDto(quotation),
       order: order ? toDto(order) : null,
       fulfillment: fulfillment ? toDto(fulfillment) : null,
       reEnteredApproval: false,

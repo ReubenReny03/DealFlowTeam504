@@ -35,7 +35,7 @@ import { SessionStore } from '../core/state/session.store';
             @for (item of nav; track item.route) {
               <li>
                 <a [routerLink]="item.route" routerLinkActive="border-slate-900 text-slate-900"
-                   class="block border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-slate-500 transition hover:text-slate-800">{{ item.label }}</a>
+                   class="block border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-slate-500 transition-all duration-150 hover:text-slate-800">{{ item.label }}</a>
               </li>
             }
           </ul>

@@ -9,8 +9,8 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
   template: `
     @if (open()) {
       <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="absolute inset-0 bg-slate-900/40" (click)="close.emit()"></div>
-        <div class="df-card relative z-10 w-full max-w-lg p-6" role="dialog" aria-modal="true">
+        <div class="df-fade-in absolute inset-0 bg-slate-900/30 backdrop-blur-sm" (click)="close.emit()"></div>
+        <div class="df-scale-in df-card relative z-10 w-full max-w-lg p-6 shadow-2xl" role="dialog" aria-modal="true">
           <div class="mb-4 flex items-start justify-between gap-4">
             <div>
               <h2 class="df-h2">{{ title() }}</h2>

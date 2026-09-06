@@ -10,7 +10,7 @@ import { RouterLink } from '@angular/router';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (link()) {
-      <a [routerLink]="link()" class="df-card block p-5 transition hover:border-brand-300 hover:shadow-md">
+      <a [routerLink]="link()" class="df-card group block p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-[0_12px_28px_-12px_rgb(15_23_42_/_0.18)]">
         <ng-container *ngTemplateOutlet="body" />
       </a>
     } @else {
@@ -18,6 +18,7 @@ import { RouterLink } from '@angular/router';
     }
 
     <ng-template #body>
+      <div class="mb-3 h-1 w-8 rounded-full transition-all duration-200 group-hover:w-12" [class]="accentClass()"></div>
       <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ label() }}</p>
       <p class="mt-2 text-3xl font-semibold tracking-tight" [class]="toneClass()">{{ value() }}</p>
       @if (caption()) { <p class="mt-1 text-sm text-slate-500">{{ caption() }}</p> }
@@ -37,6 +38,15 @@ export class KpiTileComponent {
       case 'danger': return 'text-rose-600';
       case 'good': return 'text-emerald-600';
       default: return 'text-slate-900';
+    }
+  }
+
+  accentClass(): string {
+    switch (this.tone()) {
+      case 'warn': return 'bg-amber-400';
+      case 'danger': return 'bg-rose-400';
+      case 'good': return 'bg-emerald-400';
+      default: return 'bg-brand-400';
     }
   }
 }

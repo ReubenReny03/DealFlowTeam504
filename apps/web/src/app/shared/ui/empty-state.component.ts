@@ -16,8 +16,8 @@ import { NO_MATCHES } from '@dealflow/shared';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
-      <div class="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-lg">{{ filtered() ? '🔍' : icon() }}</div>
+    <div class="df-fade-in flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
+      <div class="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slate-50 to-slate-100 text-lg ring-1 ring-slate-200">{{ filtered() ? '🔍' : icon() }}</div>
       <h3 class="text-base font-semibold text-slate-800">{{ shownTitle() }}</h3>
       <p class="mt-1.5 max-w-md text-sm leading-relaxed text-slate-500">{{ shownBody() }}</p>
       @if (filtered()) {

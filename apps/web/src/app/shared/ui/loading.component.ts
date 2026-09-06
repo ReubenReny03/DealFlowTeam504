@@ -8,7 +8,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   template: `
     <div class="space-y-2" role="status" [attr.aria-label]="label()">
       @for (row of rows(); track row) {
-        <div class="h-11 animate-pulse rounded-lg bg-slate-100"></div>
+        <div class="df-skeleton h-11"></div>
       }
       <span class="sr-only">{{ label() }}</span>
     </div>

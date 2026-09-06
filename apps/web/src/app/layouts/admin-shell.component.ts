@@ -10,10 +10,10 @@ import { SessionStore } from '../core/state/session.store';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="min-h-screen bg-slate-50">
-      <header class="sticky top-0 z-40 border-b border-slate-800 bg-slate-900 text-white">
+      <header class="df-glass-dark sticky top-0 z-40 border-b text-white">
         <div class="mx-auto flex max-w-[1600px] items-center gap-6 px-6 py-3">
           <a routerLink="/admin/products" class="flex shrink-0 items-center gap-2">
-            <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-sm font-bold text-slate-900">DF</span>
+            <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-sm font-bold text-slate-900 shadow-sm">DF</span>
             <span class="text-base font-semibold tracking-tight">Sales Back-end</span>
           </a>
           <nav class="df-scroll-x flex-1">
@@ -21,7 +21,7 @@ import { SessionStore } from '../core/state/session.store';
               @for (item of nav(); track item.route) {
                 <li>
                   <a [routerLink]="item.route" routerLinkActive="bg-white/15 text-white"
-                     class="block whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white">{{ item.label }}</a>
+                     class="block whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-slate-300 transition-all duration-150 hover:bg-white/10 hover:text-white">{{ item.label }}</a>
                 </li>
               }
             </ul>

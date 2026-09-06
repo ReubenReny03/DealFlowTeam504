@@ -24,7 +24,7 @@ import { StatusChipComponent } from './status-chip.component';
             </header>
             <div class="min-h-[6rem] space-y-2 rounded-xl bg-slate-100/70 p-2">
               @for (card of column.cards; track card.id) {
-                <button type="button" class="df-card w-full p-3 text-left transition hover:border-brand-300 hover:shadow-md" (click)="cardClick.emit(card)">
+                <button type="button" class="df-card w-full p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-[0_12px_28px_-12px_rgb(15_23_42_/_0.18)]" (click)="cardClick.emit(card)">
                   <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0">
                       <p class="truncate text-sm font-semibold text-slate-800">{{ card.customerName }}</p>
