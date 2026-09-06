@@ -215,6 +215,11 @@ export class FulfillmentStore {
     await firstValueFrom(this.api.post(`/fulfillment/${id}/consolidate`, {}));
     await this.loadOne(id);
   }
+  /** Physically ships every reserved allocation not yet shipped — stock leaves the warehouse for real. */
+  async ship(id: string): Promise<void> {
+    await firstValueFrom(this.api.post(`/fulfillment/${id}/ship`, {}));
+    await this.loadOne(id);
+  }
 }
 
 @Injectable({ providedIn: 'root' })
@@ -317,6 +322,17 @@ export class BillingStore {
   async recordPayment(invoiceId: string, body: unknown): Promise<void> {
     await firstValueFrom(this.api.post(`/invoices/${invoiceId}/payments`, body));
     await this.loadInvoice(invoiceId);
+  }
+
+  /**
+   * Bills whatever has shipped but isn't invoiced yet on this order. `invoice`
+   * comes back `null` (not an error) when there's nothing new to bill — every
+   * shipped unit was already invoiced.
+   */
+  async generateInvoice(orderId: string): Promise<{ invoice: InvoiceDto | null; message: string }> {
+    return firstValueFrom(
+      this.api.post<{ invoice: InvoiceDto | null; message: string }>(`/invoices/generate/${orderId}`, {}),
+    );
   }
 
   async modifySubscription(subscriptionId: string, body: unknown): Promise<void> {

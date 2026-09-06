@@ -18,7 +18,17 @@ mountModuleHealth(upsellRouter, {
   todo: [],
 });
 
-const querySchema = z.object({ quotationId: z.string().min(1) });
+const querySchema = z
+  .object({
+    quotationId: z.string().min(1).optional(),
+    // Comma-separated product ids straight from the rep's in-progress draft —
+    // lets screen 4 re-rank suggestions against lines just added on screen,
+    // before any of them have been saved to the quotation document.
+    productIds: z.string().min(1).optional(),
+  })
+  .refine((v) => v.quotationId || v.productIds, {
+    message: 'quotationId or productIds is required',
+  });
 
 /**
  * Ranked upsell panel. Candidates are every product paired against something
@@ -30,16 +40,21 @@ upsellRouter.get(
   requireAuth(),
   validate(querySchema, 'query'),
   asyncHandler(async (req, res) => {
-    const { quotationId } = req.query as unknown as z.infer<typeof querySchema>;
-    // Accept either the internal id (what screen 4's route param actually is)
-    // or the human-readable number (what a rep, or a test, would type).
-    const quotation = await (Types.ObjectId.isValid(quotationId)
-      ? Quotation.findById(quotationId)
-      : Quotation.findOne({ number: quotationId })
-    ).lean();
-    if (!quotation) throw notFound(`No quotation matching ${quotationId}`);
+    const { quotationId, productIds } = req.query as unknown as z.infer<typeof querySchema>;
 
-    const cartProductIds = (quotation as any).lines.map((l: any) => String(l.productId));
+    let cartProductIds: string[];
+    if (productIds) {
+      cartProductIds = [...new Set(productIds.split(',').map((id) => id.trim()).filter(Boolean))];
+    } else {
+      // Accept either the internal id (what screen 4's route param actually is)
+      // or the human-readable number (what a rep, or a test, would type).
+      const quotation = await (Types.ObjectId.isValid(quotationId!)
+        ? Quotation.findById(quotationId)
+        : Quotation.findOne({ number: quotationId })
+      ).lean();
+      if (!quotation) throw notFound(`No quotation matching ${quotationId}`);
+      cartProductIds = (quotation as any).lines.map((l: any) => String(l.productId));
+    }
     if (cartProductIds.length === 0) return ok<UpsellSuggestionDto[]>(res, []);
 
     const [pairings, config] = await Promise.all([

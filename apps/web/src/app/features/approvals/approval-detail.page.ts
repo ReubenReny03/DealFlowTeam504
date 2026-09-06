@@ -197,9 +197,7 @@ import {
                   <button type="button" class="df-btn-success w-full" (click)="ask('approve')">
                     Approve
                   </button>
-                  <button type="button" class="df-btn-warn w-full" (click)="ask('return')">
-                    Return for Revision
-                  </button>
+                  <!-- Return for Revision is out of scope for now; hidden until it comes back in. -->
                   <button type="button" class="df-btn-danger w-full" (click)="ask('reject')">
                     Reject
                   </button>

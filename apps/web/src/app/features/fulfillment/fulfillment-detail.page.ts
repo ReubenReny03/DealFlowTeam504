@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
-import { FulfillmentStore } from '../../core/state/feature.stores';
+import { Router, RouterLink } from '@angular/router';
+import { FulfillmentStatus, Role, type FulfillmentDto } from '@dealflow/shared';
+import { BillingStore, FulfillmentStore } from '../../core/state/feature.stores';
+import { SessionStore } from '../../core/state/session.store';
 import { ToastStore } from '../../core/state/toast.store';
 import {
   ErrorStateComponent, LoadingComponent, ModalComponent, MoneyPipe,
@@ -51,6 +53,12 @@ interface OverrideLine {
         <div class="flex gap-2">
           <button type="button" class="df-btn-primary" (click)="accept()">Accept Suggested Split</button>
           <button type="button" class="df-btn-ghost" (click)="openOverride()">Manual Override</button>
+          @if (canManageFulfillment() && canShip(f)) {
+            <button type="button" class="df-btn-primary" (click)="ship()">Ship</button>
+          }
+          @if (canManageFulfillment() && canInvoice(f)) {
+            <button type="button" class="df-btn-success" (click)="generateInvoice()">Generate Invoice</button>
+          }
         </div>
       </div>
 
@@ -203,8 +211,22 @@ interface OverrideLine {
 })
 export class FulfillmentDetailPage implements OnInit {
   protected readonly store = inject(FulfillmentStore);
+  private readonly billing = inject(BillingStore);
+  private readonly session = inject(SessionStore);
   private readonly toast = inject(ToastStore);
+  private readonly router = inject(Router);
   readonly id = input<string>('');
+
+  /**
+   * Shipping and invoicing are Finance/Ops' call, not a rep's or a Sales
+   * Manager's (spec: "Finance / Operations User ... manages warehouse
+   * fulfillment splits and backorder decisions") — so these two actions are
+   * gated in the UI, not just left to the API's 403.
+   */
+  protected readonly canManageFulfillment = computed(() => {
+    const role = this.session.role();
+    return role === Role.ADMIN || role === Role.FINANCE;
+  });
 
   protected readonly overrideOpen = signal(false);
   protected overrideLines: OverrideLine[] = [];
@@ -229,6 +251,41 @@ export class FulfillmentDetailPage implements OnInit {
       this.toast.success('Split accepted', 'Stock has been reserved against these warehouses.');
     } catch {
       /* the interceptor already toasted the reason (e.g. 409 INSUFFICIENT_STOCK) */
+    }
+  }
+
+  /** Mirrors the API's own guard on `POST /:id/ship` — reserved, and not already shipped or cancelled. */
+  canShip(f: FulfillmentDto): boolean {
+    return f.reserved && f.status !== FulfillmentStatus.SHIPPED && f.status !== FulfillmentStatus.CANCELLED;
+  }
+
+  /** Something has to have actually left the warehouse before there's anything new to bill. */
+  canInvoice(f: FulfillmentDto): boolean {
+    return f.status === FulfillmentStatus.SHIPPED || f.status === FulfillmentStatus.PARTIALLY_SHIPPED;
+  }
+
+  async ship(): Promise<void> {
+    try {
+      await this.store.ship(this.id());
+      this.toast.success('Shipped', 'Stock has left the warehouse — generate the invoice for what shipped when ready.');
+    } catch {
+      /* the interceptor already toasted the reason */
+    }
+  }
+
+  async generateInvoice(): Promise<void> {
+    const f = this.store.current();
+    if (!f) return;
+    try {
+      const { invoice, message } = await this.billing.generateInvoice(f.orderId);
+      if (invoice) {
+        this.toast.success('Invoice generated', message);
+        await this.router.navigate(['/app/invoices', invoice.id]);
+      } else {
+        this.toast.info('Nothing to invoice', message);
+      }
+    } catch {
+      /* the interceptor already toasted the reason */
     }
   }
 

@@ -555,6 +555,8 @@ export interface FulfillmentDto extends Timestamped {
   customerId: Id;
   customerName: string;
   status: FulfillmentStatus;
+  /** True once the split's stock has been reserved (accepted or overridden) — a prerequisite for shipping it. */
+  reserved: boolean;
   allocations: AllocationDto[];
   backorders: BackorderDto[];
   totalShipments: number;

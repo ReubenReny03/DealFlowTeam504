@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
   calculateBlendedRisk,
@@ -117,6 +117,23 @@ export class QuotationBuilderStore {
     () => (this.quotation()?.stage ?? QuoteStage.DRAFT) === QuoteStage.DRAFT,
   );
 
+  /** Dismissed suggestions stay hidden even after the cart changes and re-ranks the panel. */
+  private readonly dismissed = new Set<string>();
+  private suggestionsKey = '';
+
+  constructor() {
+    // Suggestions are ranked off whatever is in the cart RIGHT NOW, not what the
+    // server last saved — otherwise a product added on screen (still a `tmp-`
+    // line) never shows up as paired-against until the rep saves or reloads.
+    effect(() => {
+      const ids = [...new Set(this.draftLines().map((l) => l.productId).filter(Boolean))];
+      const key = ids.slice().sort().join(',');
+      if (key === this.suggestionsKey) return;
+      this.suggestionsKey = key;
+      void this.refreshSuggestions(ids);
+    });
+  }
+
   /* ------------------------------------------------------------ loading */
 
   async load(quotationId: string): Promise<void> {
@@ -136,7 +153,7 @@ export class QuotationBuilderStore {
       this.tier.set(quotation.tier);
       this.draftLines.set(quotation.lines.map(toInput));
       this.isDirty.set(false);
-      void this.loadSuggestions(quotationId);
+      this.dismissed.clear();
     } catch (err: any) {
       this.error.set(err?.error?.error?.message ?? 'Could not load this quotation.');
     } finally {
@@ -144,15 +161,26 @@ export class QuotationBuilderStore {
     }
   }
 
-  async loadSuggestions(quotationId: string): Promise<void> {
+  /**
+   * Re-ranks the upsell panel against whatever product ids are on screen right
+   * now — including a line the rep just added that hasn't been saved yet — so
+   * suggestions move in the same tick as the cart instead of waiting for the
+   * next save or a full reload.
+   */
+  private async refreshSuggestions(productIds: string[]): Promise<void> {
+    if (productIds.length === 0) {
+      this.suggestions.set([]);
+      return;
+    }
     try {
-      this.suggestions.set(
-        await firstValueFrom(
-          this.api.get<UpsellSuggestionDto[]>('/upsell/suggestions', { quotationId }),
-        ),
+      const suggestions = await firstValueFrom(
+        this.api.get<UpsellSuggestionDto[]>('/upsell/suggestions', {
+          productIds: productIds.join(','),
+        }),
       );
+      this.suggestions.set(suggestions.filter((s) => !this.dismissed.has(s.productId)));
     } catch {
-      // No suggestions for this quote (e.g. every product is already on it) — the panel shows its own empty hint.
+      // No suggestions for this cart (e.g. every product is already on it) — the panel shows its own empty hint.
       this.suggestions.set([]);
     }
   }
@@ -215,6 +243,7 @@ export class QuotationBuilderStore {
   }
 
   dismissSuggestion(productId: string): void {
+    this.dismissed.add(productId);
     this.suggestions.update((list) => list.filter((s) => s.productId !== productId));
   }
 
